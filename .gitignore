@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Django
+db.sqlite3
+hub/staticfiles/*
+!hub/staticfiles/.gitkeep
+
+# Secrets and generated data
+.env
+data/
+!data/.gitkeep
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

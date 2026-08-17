@@ -1,0 +1,209 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bússola — Benchmarks</title>
+  <script src="{% static 'vendor/chart.umd.min.js' %}"></script>
+  <style>
+    :root {
+      --bg: #ffffff; --fg: #1a1a1a; --muted: #666; --line: #e2e2e2;
+      --accent: #1f5f8b; --warn-bg: #fdecea; --warn-fg: #8b1a1a; --warn-line: #d33;
+      --card: #fafafa;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #16181c; --fg: #e8e8e8; --muted: #9aa0a6; --line: #2c3037;
+        --accent: #6fb3e0; --warn-bg: #3a1518; --warn-fg: #ff9a9a; --warn-line: #d33;
+        --card: #1d2026;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg);
+           font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+    h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+    .sub { color: var(--muted); margin: 0 0 1.5rem; }
+
+    .banner { background: var(--warn-bg); color: var(--warn-fg);
+              border: 2px solid var(--warn-line); border-radius: 6px;
+              padding: .9rem 1.1rem; margin-bottom: 1.5rem; }
+    .banner strong { display: block; font-size: 1.05rem; letter-spacing: .02em; }
+    .banner p { margin: .4rem 0 0; font-size: .9rem; }
+
+    form { display: flex; flex-wrap: wrap; gap: .75rem; align-items: flex-end;
+           padding: 1rem; background: var(--card); border: 1px solid var(--line);
+           border-radius: 6px; margin-bottom: 1.5rem; }
+    label { display: block; font-size: .78rem; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--muted); margin-bottom: .25rem; }
+    select, button { font: inherit; padding: .45rem .6rem; border-radius: 4px;
+                     border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+    button { background: var(--accent); color: #fff; border-color: var(--accent);
+             cursor: pointer; }
+
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+             gap: .75rem; margin-bottom: 1.5rem; }
+    .stat { background: var(--card); border: 1px solid var(--line);
+            border-radius: 6px; padding: .8rem .9rem; }
+    .stat .k { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em;
+               color: var(--muted); }
+    .stat .v { font-size: 1.35rem; font-variant-numeric: tabular-nums; margin-top: .15rem; }
+    .stat .u { font-size: .8rem; color: var(--muted); }
+
+    .chart-box { border: 1px solid var(--line); border-radius: 6px; padding: 1rem;
+                 background: var(--card); margin-bottom: 1.5rem; overflow-x: auto; }
+    .rationale { border-left: 3px solid var(--accent); padding: .5rem 0 .5rem .9rem;
+                 margin-bottom: 1.5rem; font-size: .9rem; color: var(--muted); }
+    .rationale h3 { margin: 0 0 .3rem; font-size: .78rem; text-transform: uppercase;
+                    letter-spacing: .05em; color: var(--fg); }
+    .suppressed { background: var(--card); border: 1px dashed var(--line);
+                  border-radius: 6px; padding: 1.5rem; text-align: center; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    th, td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid var(--line); }
+    th { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    details { margin-top: 1rem; }
+    summary { cursor: pointer; color: var(--warn-fg); font-size: .9rem; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="banner">
+    <strong>⚠ UNSAFE — EXACT VALUES — DEVELOPMENT ONLY</strong>
+    <p>
+      This page publishes <em>exact</em> statistics with no privacy protection. It exists
+      to prove the ingestion pipeline end to end in Sprint 1. Differential privacy is
+      introduced in Sprint 2, at which point every figure below is replaced by a noisy
+      release with a confidence interval and a recorded privacy-budget charge.
+      <strong>Never point this build at real plant data.</strong>
+    </p>
+  </div>
+
+  <h1>Benchmarks</h1>
+  {% if collaboration %}
+    <p class="sub">
+      <strong>{{ collaboration.name }}</strong> — operated by {{ collaboration.operator_name }}
+      ({{ collaboration.get_operator_kind_display }})
+    </p>
+  {% else %}
+    <p class="sub">Bússola — privacy-preserving benchmarking</p>
+  {% endif %}
+
+  <form method="get">
+    <div>
+      <label for="collaboration">Collaboration</label>
+      <select name="collaboration" id="collaboration">
+        {% for c in collaborations %}
+          <option value="{{ c.slug }}" {% if c.slug == selected_collaboration %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="cohort">Cohort</label>
+      <select name="cohort" id="cohort">
+        {% for c in cohorts %}
+          <option value="{{ c.code }}" {% if c.code == selected_cohort %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="metric">Metric</label>
+      <select name="metric" id="metric">
+        {% for m in metrics %}
+          <option value="{{ m.code }}" {% if m.code == selected_metric %}selected{% endif %}>{{ m.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="period">Period</label>
+      <select name="period" id="period">
+        {% for p in periods %}
+          <option value="{{ p.label }}" {% if p.label == selected_period %}selected{% endif %}>{{ p.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit">View</button>
+  </form>
+
+  {% if result %}
+    {% if result.suppressed %}
+      <div class="suppressed">
+        <p><strong>Suppressed</strong></p>
+        <p>{{ result.suppression_reason }}</p>
+        <p style="font-size:.85rem">
+          Minimum contributors required: {{ result.min_contributors }}. This is conventional
+          statistical disclosure control — a “benchmark” drawn from one or two
+          contributors is a disclosure, not a benchmark.
+        </p>
+      </div>
+    {% else %}
+      <div class="stats">
+        <div class="stat"><div class="k">Contributors</div><div class="v">{{ result.n_contributors }}</div><div class="u">parties</div></div>
+        <div class="stat"><div class="k">Q1 (25th)</div><div class="v">{{ result.q25|floatformat:1 }}</div><div class="u">{{ result.metric.unit }}</div></div>
+        <div class="stat"><div class="k">Median</div><div class="v">{{ result.median|floatformat:1 }}</div><div class="u">{{ result.metric.unit }}</div></div>
+        <div class="stat"><div class="k">Q3 (75th)</div><div class="v">{{ result.q75|floatformat:1 }}</div><div class="u">{{ result.metric.unit }}</div></div>
+      </div>
+
+      <div class="chart-box">
+        <canvas id="dist" height="120"
+                data-q25="{{ result.q25|floatformat:4 }}"
+                data-median="{{ result.median|floatformat:4 }}"
+                data-q75="{{ result.q75|floatformat:4 }}"
+                data-min="{{ result.minimum|floatformat:4 }}"
+                data-max="{{ result.maximum|floatformat:4 }}"
+                data-unit="{{ result.metric.unit }}"></canvas>
+      </div>
+
+      <div class="rationale">
+        <h3>Why these bounds</h3>
+        {{ result.metric.bounds_rationale }}
+      </div>
+
+      <details>
+        <summary>Show individual plant values (Sprint 1 only — this is what Sprint 2 removes)</summary>
+        <table>
+          <thead><tr><th>Contributor</th><th style="text-align:right">Value ({{ result.metric.unit }})</th></tr></thead>
+          <tbody>
+            {% for c in contributions %}
+              <tr><td>{{ c.contributor }}</td><td class="num">{{ c.value|floatformat:2 }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </details>
+    {% endif %}
+  {% endif %}
+
+</div>
+
+<script>
+  (function () {
+    const el = document.getElementById('dist');
+    if (!el || typeof Chart === 'undefined') return;
+    const d = el.dataset;
+    const num = (k) => parseFloat(d[k]);
+
+    // Quartile bars. Sprint 2 adds error bars from OpenDP's accuracy estimate.
+    new Chart(el, {
+      type: 'bar',
+      data: {
+        labels: ['Minimum', 'Q1', 'Median', 'Q3', 'Maximum'],
+        datasets: [{
+          label: d.unit,
+          data: [num('min'), num('q25'), num('median'), num('q75'), num('max')],
+          backgroundColor: ['#9aa0a6', '#4f8fc0', '#1f5f8b', '#4f8fc0', '#9aa0a6'],
+          borderRadius: 3
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: false, title: { display: true, text: d.unit } } }
+      }
+    });
+  })();
+</script>
+</body>
+</html>

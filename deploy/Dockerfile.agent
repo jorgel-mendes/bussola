@@ -1,0 +1,29 @@
+# Bussola plant agent.
+#
+# Deliberately a separate image from the hub, with no Django in it. That is what
+# makes the multi-party architecture real rather than cosmetic: the agent is an
+# independent program with its own dependency tree, its own credential, and no
+# access to the hub's database.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /agent
+
+COPY contracts/ /contracts/
+COPY agent/pyproject.toml ./
+COPY agent/bussola_agent/ ./bussola_agent/
+
+# Installed standalone, not from the workspace lock, to prove the agent has no
+# hidden dependency on the hub.
+RUN uv pip install --system --no-cache /contracts \
+ && uv pip install --system --no-cache httpx polars typer \
+ && uv pip install --system --no-cache --no-deps .
+
+ENTRYPOINT ["bussola-agent"]
+CMD ["check"]

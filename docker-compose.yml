@@ -1,0 +1,98 @@
+# Local multi-party demo.
+#
+# Three agents, three separate containers, three separate data volumes, three
+# separate API tokens, talking to the hub over a network boundary. The only
+# thing this does not reproduce from a real deployment is running the agents on
+# physically separate corporate networks -- everything else about the
+# multi-party shape is genuine.
+#
+#   docker compose up --build hub          # hub + postgres
+#   docker compose run --rm seed           # create plants, metrics, tokens
+#   docker compose up agent-01 agent-02 agent-03
+#
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: bussola
+      POSTGRES_PASSWORD: bussola
+      POSTGRES_DB: bussola
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bussola"]
+      interval: 5s
+      retries: 10
+
+  hub:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.hub
+    environment:
+      DATABASE_URL: postgres://bussola:bussola@postgres:5432/bussola
+      SECRET_KEY: local-dev-only
+      ALLOWED_HOSTS: localhost,127.0.0.1,hub
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      DEBUG: "True"
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  seed:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.hub
+    environment:
+      DATABASE_URL: postgres://bussola:bussola@postgres:5432/bussola
+      SECRET_KEY: local-dev-only
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+    depends_on:
+      postgres: {condition: service_healthy}
+    volumes: ["./data:/app/data"]
+    command: >
+      sh -c "python hub/manage.py migrate --noinput &&
+             python hub/manage.py seed_demo --contributors 12 --periods 24
+               --tokens-out /app/data/tokens.json &&
+             python datagen/generate.py --contributors 12 --periods 24 --out /app/data"
+
+  # Each agent mounts ONLY its own plant directory. An agent container cannot
+  # read another plant's data even if it tried -- the isolation is enforced by
+  # the volume mount, not by convention.
+  agent-01:
+    build: {context: ., dockerfile: deploy/Dockerfile.agent}
+    environment:
+      BUSSOLA_HUB_URL: http://hub:8000
+      BUSSOLA_CONTRIBUTOR_LABEL: plant-01
+      BUSSOLA_TOKEN: ${AGENT_01_TOKEN:-set-me-from-data/tokens.json}
+    volumes: ["./data/plant-01:/data:ro"]
+    depends_on: [hub]
+    command:
+      ["submit", "--metric", "specific_thermal_energy", "--period", "2026-07",
+       "--file", "/data/specific_thermal_energy.csv"]
+
+  agent-02:
+    build: {context: ., dockerfile: deploy/Dockerfile.agent}
+    environment:
+      BUSSOLA_HUB_URL: http://hub:8000
+      BUSSOLA_CONTRIBUTOR_LABEL: plant-02
+      BUSSOLA_TOKEN: ${AGENT_02_TOKEN:-set-me-from-data/tokens.json}
+    volumes: ["./data/plant-02:/data:ro"]
+    depends_on: [hub]
+    command:
+      ["submit", "--metric", "specific_thermal_energy", "--period", "2026-07",
+       "--file", "/data/specific_thermal_energy.csv"]
+
+  agent-03:
+    build: {context: ., dockerfile: deploy/Dockerfile.agent}
+    environment:
+      BUSSOLA_HUB_URL: http://hub:8000
+      BUSSOLA_CONTRIBUTOR_LABEL: plant-03
+      BUSSOLA_TOKEN: ${AGENT_03_TOKEN:-set-me-from-data/tokens.json}
+    volumes: ["./data/plant-03:/data:ro"]
+    depends_on: [hub]
+    command:
+      ["submit", "--metric", "specific_thermal_energy", "--period", "2026-07",
+       "--file", "/data/specific_thermal_energy.csv"]
+
+volumes:
+  pgdata:

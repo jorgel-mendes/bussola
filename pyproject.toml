@@ -1,0 +1,77 @@
+[project]
+name = "bussola-hub"
+version = "0.1.0"
+description = "Privacy-preserving industrial benchmarking platform — hub"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.1,<6.0",
+    "djangorestframework>=3.15",
+    "django-environ>=0.11",
+    "psycopg[binary]>=3.2",
+    "polars>=1.0",
+    "gunicorn>=23.0",
+    "whitenoise>=6.7",
+    "bussola-contracts",
+]
+
+[project.optional-dependencies]
+# OpenDP lands in Sprint 2. Kept out of the base install so Sprint 1's build
+# stays fast and green; run `uv sync --extra dp` for the week-4 spike.
+dp = ["opendp>=0.15,<0.16"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-django>=4.9",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "hypothesis>=6.100",
+    "respx>=0.21",
+    "bussola-agent",
+]
+
+[tool.uv.workspace]
+members = ["contracts", "agent"]
+
+[tool.uv.sources]
+bussola-contracts = { workspace = true }
+bussola-agent = { workspace = true }
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+pythonpath = ["hub"]
+testpaths = ["hub", "agent", "tests"]
+python_files = ["test_*.py"]
+addopts = "-q --strict-markers"
+
+[tool.coverage.run]
+source = ["hub", "agent/bussola_agent", "contracts/bussola_contracts"]
+omit = ["*/migrations/*", "*/tests/*", "*/test_*.py", "hub/manage.py", "*/wsgi.py", "*/asgi.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = ["**/migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "DJ", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/test_*.py" = ["S101"]
+
+[tool.ruff.lint.isort]
+# The Django apps live under hub/ and are imported by bare name, so ruff would
+# otherwise sort them as third-party.
+known-first-party = [
+    "benchmarks",
+    "budget",
+    "bussola_agent",
+    "bussola_contracts",
+    "catalog",
+    "collaborations",
+    "config",
+    "contributors",
+    "ingest",
+    "privacy",
+]

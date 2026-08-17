@@ -1,0 +1,26 @@
+# Render blueprint. Deploy the empty app on day 3 of Sprint 1 -- deployment
+# discovered in week 12 is the classic capstone failure.
+services:
+  - type: web
+    name: bussola-hub
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.hub
+    plan: free
+    healthCheckPath: /api/v1/healthz/
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.prod
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_HOSTS
+        sync: false          # set to the .onrender.com hostname
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false          # https://<host>
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bussola-db
+          property: connectionString
+
+databases:
+  - name: bussola-db
+    plan: free
