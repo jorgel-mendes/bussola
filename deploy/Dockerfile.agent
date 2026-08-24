@@ -21,9 +21,15 @@ COPY agent/bussola_agent/ ./bussola_agent/
 
 # Installed standalone, not from the workspace lock, to prove the agent has no
 # hidden dependency on the hub.
-RUN uv pip install --system --no-cache /contracts \
+#
+# --no-sources is required: agent/pyproject.toml declares
+# `bussola-contracts = { workspace = true }` for local development, and that
+# reference cannot resolve outside the uv workspace. Ignoring tool.uv.sources
+# here is what makes this a genuinely standalone build -- contracts is installed
+# from the copied path immediately above instead.
+RUN uv pip install --system --no-cache --no-sources /contracts \
  && uv pip install --system --no-cache httpx polars typer \
- && uv pip install --system --no-cache --no-deps .
+ && uv pip install --system --no-cache --no-deps --no-sources .
 
 ENTRYPOINT ["bussola-agent"]
 CMD ["check"]

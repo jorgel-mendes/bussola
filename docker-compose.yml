@@ -49,11 +49,12 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
     volumes: ["./data:/app/data"]
+    # Note: no extra indentation inside the folded scalar. A more-indented line
+    # is kept literal by YAML, which silently breaks the shell command apart.
     command: >
       sh -c "python hub/manage.py migrate --noinput &&
-             python hub/manage.py seed_demo --contributors 12 --periods 24
-               --tokens-out /app/data/tokens.json &&
-             python datagen/generate.py --contributors 12 --periods 24 --out /app/data"
+      python hub/manage.py seed_demo --contributors 12 --periods 24 --tokens-out /app/data/tokens.json &&
+      python datagen/generate.py --contributors 12 --periods 24 --out /app/data"
 
   # Each agent mounts ONLY its own plant directory. An agent container cannot
   # read another plant's data even if it tried -- the isolation is enforced by

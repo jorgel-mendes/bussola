@@ -3,12 +3,11 @@
 **Privacy-preserving benchmarking platform**
 Quantic MSSE Capstone · Jorge Luis dos Santos Mendes
 
-<!-- Replace USERNAME with your GitHub account on first push, or the badge renders broken. -->
-[![CI](https://github.com/USERNAME/bussola/actions/workflows/ci.yml/badge.svg)](https://github.com/USERNAME/bussola/actions/workflows/ci.yml)
+[![CI](https://github.com/jorgel-mendes/bussola/actions/workflows/ci.yml/badge.svg)](https://github.com/jorgel-mendes/bussola/actions/workflows/ci.yml)
 
 | Deliverable | Status |
 |---|---|
-| **Task board** (Trello) | _add URL_ — needed **now**; the board must show work as it happens |
+| **Task board** (Trello) | [Bussola — MSSE Capstone](https://trello.com/b/ZMEqk4Up/bussola-msse-capstone) ✅ public |
 | **Design & testing doc** | [`docs/DESIGN.md`](docs/DESIGN.md) ✅ |
 | **Deployed version** | Sprint 1 runs locally. Render blueprint is committed (`render.yaml`); URL goes here when deployed. |
 | **Demo recording** | One per sprint — record Sprint 1 even though it is local |
@@ -118,7 +117,7 @@ uv run pytest --cov --cov-report=term-missing
 uv run ruff check .
 ```
 
-94 tests as of Sprint 1. Several defend **privacy invariants** rather than mere
+144 tests as of Sprint 1. Several defend **privacy invariants** rather than mere
 correctness, and say so in their docstrings — notably submission idempotency (a
 contributor that submits twice would double its weight and break the sensitivity
 bound the guarantee rests on), contributor-identity-from-token, and the
