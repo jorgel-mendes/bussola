@@ -355,6 +355,10 @@ consequence of a privacy decision.
 | [0003](adr/0003-opendp-over-diffprivlib.md) | OpenDP over diffprivlib |
 | [0004](adr/0004-collaboration-as-tenancy-boundary.md) | Collaboration as the tenancy boundary |
 
+ADR-0003 carries the **spike outcome**: OpenDP confirmed, with three resolved
+blockers (Polars 1.36.1 pin, undeclared `pyarrow`, required `Margin`) and two
+findings carried into Sprint 2 planning.
+
 Supporting references: [GLOSSARY.md](GLOSSARY.md) (frozen domain vocabulary,
 enforced by `hub/test_naming_drift.py`) and [REVIEW.md](REVIEW.md) (Sprint 1
 review, known gaps, Sprint 2 plan).
@@ -382,6 +386,11 @@ change becomes a data-preserving migration exercise.
 
 Deferred by design: OpenDP, budget ledger, accuracy intervals, anything
 cryptographic.
+
+**Sprint 1 review and retrospective:** [SPRINT-1-REVIEW.md](SPRINT-1-REVIEW.md).
+Five defects shipped and were caught by running things rather than reading them;
+the OpenDP spike (`evaluation/spike_opendp.py`) ran before the sprint closed and
+surfaced a hard Polars version conflict plus the measured privacy-utility floor.
 
 ### Sprint 2 — the privacy core (planned)
 

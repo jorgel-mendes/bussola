@@ -8,7 +8,7 @@ dependencies = [
     "djangorestframework>=3.15",
     "django-environ>=0.11",
     "psycopg[binary]>=3.2",
-    "polars>=1.0",
+    "polars>=1.36,<1.37",  # pinned: OpenDP 0.15.1 embeds Polars 1.36.1 DSL schema
     "gunicorn>=23.0",
     "whitenoise>=6.7",
     "bussola-contracts",
@@ -17,7 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 # OpenDP lands in Sprint 2. Kept out of the base install so Sprint 1's build
 # stays fast and green; run `uv sync --extra dp` for the week-4 spike.
-dp = ["opendp>=0.15,<0.16"]
+dp = ["opendp>=0.15,<0.16", "pyarrow>=17"]  # pyarrow: required by OpenDP summarize()
 
 [dependency-groups]
 dev = [

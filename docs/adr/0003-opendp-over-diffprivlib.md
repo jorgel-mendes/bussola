@@ -59,3 +59,66 @@ before the library is on the critical path. If the learning curve proves worse
 than estimated, `diffprivlib` is the fallback — simpler API, weaker guarantees —
 and switching costs a day because all DP code sits behind the `privacy` app's
 mechanism registry rather than being scattered through views.
+
+---
+
+## Spike outcome (S1-16) — decision confirmed
+
+Run: `uv run python evaluation/spike_opendp.py`
+
+**PROCEED with OpenDP.** The `Context` API expresses our privacy unit directly,
+the mechanisms work, and the limits found are properties of differential privacy
+at small N — not of the library. `diffprivlib` would meet the same wall with
+weaker guarantees.
+
+### Blockers found and resolved
+
+1. **OpenDP 0.15.1 embeds the Polars 1.36.1 DSL schema.** With Polars 1.43
+   installed, `Context.compositor` fails: *"can't deserialize DSL with
+   incompatible schema"*. Polars is now pinned to `>=1.36,<1.37` in both the hub
+   and the agent. This is a real constraint on the whole project — the agent uses
+   Polars too — and it is the single most valuable thing the spike surfaced,
+   because it would otherwise have appeared in Sprint 2 week 1 as an
+   inexplicable FFI error.
+2. **`summarize()` requires `pyarrow`**, which OpenDP does not declare. Added to
+   the `dp` extra.
+3. **Quantile queries require `Margin(max_length=...)`** or fail with
+   *"Must know max_length"*. Legitimate here: membership is public
+   ([ADR-0004](0004-collaboration-as-tenancy-boundary.md), SPEC §3.2), so a
+   public bound on the row count leaks nothing.
+
+### Carried into Sprint 2 planning
+
+4. **`summarize()` returns no accuracy interval for the exponential mechanism** —
+   only the mechanism scale (`ExponentialMin`, `accuracy: null`). Story **S2-5**
+   assumed the confidence interval could be read from OpenDP. It cannot, for
+   quantiles. It must be derived by simulation instead. Re-estimate that card.
+5. **Utility at N = 12 is poor at any defensible epsilon.** See below.
+
+### Measured privacy–utility (median, 3 queries per release)
+
+Median absolute error in MJ/t clinker, 60 trials per cell. The true sector IQR
+is roughly 700 MJ/t, so an error near or above that is useless.
+
+| N | ε=0.5 | ε=1 | ε=2 | ε=5 | ε=10 |
+|---|---|---|---|---|---|
+| 12 | 1405 | 792 | 115 | 62 | 14 |
+| 25 | 678 | 183 | 54 | 27 | 22 |
+| 50 | 151 | 49 | 26 | 11 | 8 |
+| 100 | 52 | 26 | 12 | 9 | 7 |
+| 250 | 24 | 7 | 6 | 5 | 5 |
+
+Reading it: **at ε = 1 the practical floor is around N = 50.** At N = 12 — the
+seeded demo size — ε = 1 produces an error larger than the quantity being
+measured. Either the consortium is larger, or epsilon is looser, or quantiles
+are not publishable.
+
+This is the project's central trade-off arriving early, with numbers, which is
+exactly what the spike was for.
+
+### Candidate grid width barely matters
+
+At N = 50, ε = 2: full bounds (1760–7100) → 19 MJ/t; BAT-centred (2500–5000) →
+20; tight (2900–4500) → 31. Narrowing the grid does **not** buy accuracy and at
+some point costs it. Useful, because it removes the temptation to tighten bounds
+toward the observed data — which would have leaked.
