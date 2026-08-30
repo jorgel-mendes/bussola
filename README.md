@@ -14,23 +14,50 @@ Quantic MSSE Capstone · Jorge Luis dos Santos Mendes
 
 ---
 
-Parties who don't trust each other often need a statistic only their combined
-data can produce — an association benchmarking member plants, a university
-pooling study sites, an agency publishing tabulations. Computing it means
-disclosing data to competitors or across governance perimeters, so they refuse,
-and the statistic either doesn't exist or comes from stale survey forms.
+## Why this exists
 
-Bússola replaces the trust-based promise with a mathematical guarantee.
-Contributors submit aggregates through a local agent; the hub publishes cohort
-statistics protected by differential privacy, with every unit of privacy budget
-spent recorded in an append-only ledger.
+In my chemical engineering degree, almost every question worth researching
+needed real plant data. We almost never got it — and not because companies were
+hostile. Several were willing. Nobody could give them a safe way to say yes, so
+the default answer became no and the research didn't happen.
 
-The buyer is whoever occupies the neutral seat — the party contributors already
-trust to hold their data. A `Collaboration` models that tenancy and records which
-kind of operator it is, because the guarantee is only as strong as that trust
-([ADR-0004](docs/adr/0004-collaboration-as-tenancy-boundary.md)). The seeded demo
-is industrial: cement plants, energy intensity, thermodynamically justified
-bounds.
+That wall isn't a student problem. It's the same one that stops an industry
+association answering *"how does my plant compare?"*, stops hospitals pooling
+results across sites, and stops a statistical agency publishing without exposing
+respondents. Four buyers, one blocker.
+
+The blocker is that **trust is currently a contract, not a control**. The answer
+today is a confidentiality agreement and a promise — and under LGPD a promise is
+not something a compliance officer can sign off.
+
+**Bússola replaces the promise with a proof.** Contributors submit aggregates
+through an agent that runs on their own machine; raw data never leaves the site.
+The operator publishes group statistics protected by differential privacy. Every
+unit of privacy spent is written to an append-only ledger an auditor can
+inspect — so the guarantee is checkable rather than asserted.
+
+### Who operates it
+
+Whoever the contributors already trust: an industry association, a university's
+data-governance office, a statistical agency, a sector regulator. They already
+have the members, the mandate and the relationship — what they lacked was a
+mechanism. `Collaboration` models that tenancy and records which kind of operator
+it is, because the guarantee is only as strong as that existing trust
+([ADR-0004](docs/adr/0004-collaboration-as-tenancy-boundary.md)).
+
+### Why the small end
+
+Large players solved this for themselves — Catena-X across the German automotive
+value chain, MELLODDY across ten rival pharma companies (all ten ended up with
+better models), and "data clean room" is now a Gartner category served by AWS,
+Snowflake and Decentriq. Those are built for enterprises with legal teams and
+seven-figure budgets; MELLODDY spent $1.19M on compute in a single year. A
+regional federation, a university research group, or a twelve-plant consortium
+has the same problem and no product.
+
+The seeded demo is industrial: cement plants, specific thermal energy, bounds
+justified from process thermodynamics and the EU BAT reference document
+([docs/REFERENCES.md](docs/REFERENCES.md)).
 
 > ### ⚠ Sprint 1 status
 > This build publishes **exact, unprotected statistics** behind a warning banner.

@@ -13,6 +13,19 @@ Status: **Sprint 1 of 3** · Last updated: Sprint 1
 
 ## 1. Problem and Solution Overview
 
+### Origin
+
+This project began with a problem I had as a chemical engineering student:
+almost every research question worth asking needed real plant data, and we
+almost never got it. Not because companies were hostile — several were willing.
+Nobody could give them a safe way to say yes, so the default answer became no.
+
+That gap is the reason the platform is domain-neutral rather than
+association-specific. A university research group and an industry federation are
+blocked by the same thing.
+
+### The general form
+
 Parties who do not trust each other often need a statistic that can only be
 computed from their combined data. An industry association is asked *"how does
 my plant compare to others in my sector?"*; a university needs a pooled result
