@@ -57,15 +57,37 @@ def test_the_seeded_split_matches_datagen():
     drift, the seeded roster and the generated CSVs describe different
     consortia, and every benchmark is computed over the wrong cohort.
     """
+    import importlib.util
     import sys
     from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "datagen"))
-    from generate import COHORT_WEIGHTS as DATAGEN_WEIGHTS
+    # Loaded from its path under a private name, and unregistered afterwards.
+    #
+    # The obvious version -- sys.path.insert then `import generate` -- leaks the
+    # path into every later test in the process, which is what Copilot flagged.
+    # It also caches the module under a name a later import would reuse, and
+    # that bit me for real earlier in this sprint: after editing
+    # datagen/generate.py the test kept reading the previous version, so a
+    # correctly restored file looked broken.
+    #
+    # The module IS registered in sys.modules before execution, briefly and
+    # under a private name. That is not optional: @dataclass resolves its type
+    # hints through sys.modules[cls.__module__], and generate.py defines
+    # dataclasses, so executing it unregistered fails with a bare AttributeError
+    # from inside the stdlib.
+    datagen = Path(__file__).resolve().parents[2] / "datagen" / "generate.py"
+    spec = importlib.util.spec_from_file_location("_datagen_generate", datagen)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+        datagen_weights = module.COHORT_WEIGHTS
+    finally:
+        sys.modules.pop(spec.name, None)
 
     from contributors.management.commands.seed_demo import COHORT_WEIGHTS as SEED_WEIGHTS
 
-    assert SEED_WEIGHTS == DATAGEN_WEIGHTS
+    assert datagen_weights == SEED_WEIGHTS
 
 
 def test_is_idempotent():

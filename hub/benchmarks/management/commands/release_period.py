@@ -66,12 +66,21 @@ class Command(BaseCommand):
             for cohort in collaboration.cohorts.all()
             for metric in collaboration.metrics.filter(is_active=True)
         ]
+        # One query for every already-published cell, rather than an exists()
+        # per cell. At demo scale that is 6 queries against 1, so this is a
+        # code-quality fix and not a live performance problem -- but the loop
+        # scales with cohorts x metrics, and a collaboration with 20 cohorts and
+        # 10 metrics would issue 200 round trips to learn something one query
+        # answers.
+        published_pairs = set(
+            BenchmarkRelease.objects.filter(period=period).values_list(
+                "cohort_id", "metric_id"
+            )
+        )
         pending = [
             (cohort, metric)
             for cohort, metric in cells
-            if not BenchmarkRelease.objects.filter(
-                cohort=cohort, metric=metric, period=period
-            ).exists()
+            if (cohort.pk, metric.pk) not in published_pairs
         ]
 
         self.stdout.write(f"Collaboration : {collaboration.name}")
