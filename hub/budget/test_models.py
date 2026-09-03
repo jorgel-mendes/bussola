@@ -24,9 +24,25 @@ def budget(period) -> BudgetPeriod:
     return BudgetPeriod.objects.create(period=period, epsilon_total=Decimal("1.0000"))
 
 
+def make_release(budget, cohort, metric):
+    from benchmarks.models import BenchmarkRelease
+
+    existing = BenchmarkRelease.objects.filter(
+        cohort=cohort, metric=metric, period=budget.period
+    ).first()
+    return existing or BenchmarkRelease.objects.create(
+        period=budget.period,
+        cohort=cohort,
+        metric=metric,
+        n_contributors=8,
+        epsilon_spent=Decimal("1.000000"),
+    )
+
+
 def make_entry(budget, cohort, metric, epsilon="0.100000", statistic="median") -> LedgerEntry:
     return LedgerEntry.objects.create(
         budget_period=budget,
+        release=make_release(budget, cohort, metric),
         cohort=cohort,
         metric=metric,
         statistic=statistic,

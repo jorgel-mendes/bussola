@@ -114,6 +114,22 @@ class LedgerNeverOverspends(TestCase):
             statistic="median",
             mechanism="exponential",
             epsilon=epsilon,
+            release=self._release_for(budget),
+        )
+
+    def _release_for(self, budget):
+        """One release per budget. Ledger entries are NOT NULL on `release`."""
+        from benchmarks.models import BenchmarkRelease
+
+        existing = BenchmarkRelease.objects.filter(
+            cohort=self.cohort, metric=self.metric, period=budget.period
+        ).first()
+        return existing or BenchmarkRelease.objects.create(
+            period=budget.period,
+            cohort=self.cohort,
+            metric=self.metric,
+            n_contributors=8,
+            epsilon_spent=Decimal("1.000000"),
         )
 
     @settings(max_examples=150, deadline=None, suppress_health_check=[HealthCheck.too_slow])
