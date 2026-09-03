@@ -23,7 +23,11 @@ from decimal import Decimal
 from django.db import transaction
 from django.db.models import Sum
 
-from budget.exceptions import BudgetExhausted, BudgetNotConfigured
+from budget.exceptions import (
+    BudgetExhausted,
+    BudgetNotConfigured,
+    CrossCollaborationSpend,
+)
 from budget.models import BudgetPeriod, LedgerEntry
 
 
@@ -77,6 +81,28 @@ def spend(
     # first and locking after would leave the same race wide open.
     locked = BudgetPeriod.objects.select_for_update().get(pk=budget_period.pk)
     locked.check_accountant_supported()
+
+    # The tenancy boundary, in its budget form (ADR-0004). budget_period, cohort
+    # and metric arrive as independent arguments, and nothing about their types
+    # stops them belonging to three different collaborations. Charging one
+    # group's budget for another's cohort would draw down the wrong epsilon and
+    # file the ledger row under a tenant that never authorised it.
+    #
+    # Enforced here rather than trusted to callers, for the same reason
+    # compute_exact_benchmark refuses across collaborations and Submission.clean
+    # enforces RULE 3: this is the last point before the spend is durable.
+    collaboration_ids = {
+        locked.period.collaboration_id,
+        cohort.collaboration_id,
+        metric.collaboration_id,
+    }
+    if len(collaboration_ids) > 1:
+        raise CrossCollaborationSpend(
+            "Budget period, cohort and metric must belong to the same "
+            "collaboration. Spending across collaborations would draw down the "
+            "wrong group's privacy budget and corrupt both audit trails. "
+            f"Got collaboration ids {sorted(collaboration_ids)}."
+        )
 
     already = LedgerEntry.objects.filter(budget_period=locked).aggregate(
         total=Sum("epsilon_spent")

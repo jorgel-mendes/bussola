@@ -49,3 +49,16 @@ class UnsupportedAccountant(BudgetError):
     epsilon -- a plausible number that is wrong, which is the defect class
     Sprint 1 shipped three of.
     """
+
+
+class CrossCollaborationSpend(BudgetError):
+    """A spend was attempted whose budget, cohort and metric disagree.
+
+    The tenancy boundary (ADR-0004) in its budget form. A release charged to
+    one collaboration's budget for another's cohort would draw down the wrong
+    group's epsilon and put a ledger row under a tenant that never authorised
+    it -- corrupting the audit trail for both.
+
+    A distinct exception rather than ValueError because a caller catching this
+    is handling a tenancy fault, not a bad argument.
+    """

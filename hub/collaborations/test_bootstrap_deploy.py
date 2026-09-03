@@ -185,3 +185,20 @@ def test_a_strong_password_is_accepted():
     run(DJANGO_SUPERUSER_USERNAME="analyst", DJANGO_SUPERUSER_PASSWORD="tR7-quartile-ledger-92")
 
     assert User.objects.get(username="analyst").is_superuser
+
+
+def test_a_restart_with_a_weak_env_password_does_not_fail_the_deploy():
+    """Found in review of PR #1: validation ran before the existence check.
+
+    This command never resets an existing admin's password, so on a restart the
+    environment value is inert. Failing the boot over an inert value would break
+    exactly the idempotency the command exists to provide -- every container
+    restart would become a deploy failure.
+    """
+    run(DJANGO_SUPERUSER_USERNAME="analyst", DJANGO_SUPERUSER_PASSWORD="tR7-quartile-ledger-92")
+
+    output = run(DJANGO_SUPERUSER_USERNAME="analyst", DJANGO_SUPERUSER_PASSWORD="admin")
+
+    assert "already exists" in output
+    assert User.objects.count() == 1
+    assert User.objects.get(username="analyst").check_password("tR7-quartile-ledger-92")

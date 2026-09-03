@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from django.contrib import admin
 
+from budget.exceptions import UnsupportedAccountant
 from budget.models import BudgetPeriod, LedgerEntry
 
 
@@ -57,13 +58,26 @@ class BudgetPeriodAdmin(admin.ModelAdmin):
     def collaboration_name(self, obj: BudgetPeriod) -> str:
         return obj.collaboration.name
 
+    # spent()/remaining() raise UnsupportedAccountant for a non-basic budget,
+    # and zCDP is a selectable choice -- so without this the changelist 500s the
+    # moment anyone picks it. Found in review of PR #1.
+    #
+    # The raise itself is kept: reporting a zCDP budget's remaining epsilon as
+    # if composition were linear would be a plausible wrong number, which is
+    # worse than a visible gap. The admin degrades to a marker instead.
     @admin.display(description="Spent")
     def epsilon_spent(self, obj: BudgetPeriod):
-        return obj.spent()
+        try:
+            return obj.spent()
+        except UnsupportedAccountant:
+            return "— (accountant not implemented)"
 
     @admin.display(description="Remaining")
     def epsilon_remaining(self, obj: BudgetPeriod):
-        return obj.remaining()
+        try:
+            return obj.remaining()
+        except UnsupportedAccountant:
+            return "— (accountant not implemented)"
 
 
 @admin.register(LedgerEntry)

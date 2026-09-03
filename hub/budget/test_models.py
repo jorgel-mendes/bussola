@@ -199,3 +199,35 @@ def test_every_ledger_field_is_read_only_in_the_admin():
     site_admin = django_admin.site._registry[LedgerEntry]
     readonly = set(site_admin.get_readonly_fields(None))
     assert {"epsilon_spent", "statistic", "mechanism", "created_at"} <= readonly
+
+
+def test_the_admin_does_not_error_on_an_unimplemented_accountant(period):
+    """Found in review of PR #1.
+
+    zCDP is a selectable choice, and spent()/remaining() raise for it, so the
+    changelist would 500 the moment anyone picked it. The raise stays -- a zCDP
+    budget reported as if composition were linear would be a plausible wrong
+    number, worse than a visible gap -- but the admin degrades to a marker.
+    """
+    from django.contrib import admin as django_admin
+
+    zcdp = BudgetPeriod.objects.create(
+        period=period, epsilon_total=Decimal("1.0"), accountant=Accountant.ZCDP
+    )
+    site_admin = django_admin.site._registry[BudgetPeriod]
+
+    assert "not implemented" in str(site_admin.epsilon_spent(zcdp))
+    assert "not implemented" in str(site_admin.epsilon_remaining(zcdp))
+
+
+def test_the_admin_still_reports_real_figures_for_a_supported_accountant(
+    budget, cohort, metric
+):
+    """The degradation must not swallow the normal case."""
+    from django.contrib import admin as django_admin
+
+    make_entry(budget, cohort, metric, "0.250000")
+    site_admin = django_admin.site._registry[BudgetPeriod]
+
+    assert site_admin.epsilon_spent(budget) == Decimal("0.250000")
+    assert site_admin.epsilon_remaining(budget) == Decimal("0.750000")

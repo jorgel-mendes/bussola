@@ -23,7 +23,11 @@ def test_an_unseeded_hub_explains_itself_rather_than_looking_broken(client):
     assert response.status_code == 200
     body = response.content.decode()
     assert "No collaborations yet" in body
-    assert "/admin/" in body
+    # Reversed, not hard-coded: found in review of PR #1. A customised admin
+    # path or a reverse-proxy prefix would silently break a literal "/admin/".
+    from django.urls import reverse as _reverse
+
+    assert f'href="{_reverse("admin:index")}"' in body
     assert "<option" not in body
 
 

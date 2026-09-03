@@ -64,6 +64,14 @@ class Command(BaseCommand):
 
         User = get_user_model()
 
+        # Existence check FIRST. This command deliberately does not reset an
+        # existing admin's password, so on a restart the environment value is
+        # inert -- and failing the boot over an inert value would break the
+        # idempotency the command exists to provide. Found in review of PR #1.
+        if User.objects.filter(username=username).exists():
+            self.stdout.write(f"bootstrap: superuser '{username}' already exists — unchanged.")
+            return
+
         # create_superuser() does NOT run AUTH_PASSWORD_VALIDATORS -- they only
         # fire in forms and in the interactive createsuperuser. So a deploy can
         # otherwise provision a public admin with "admin"/"admin" and report
@@ -82,13 +90,6 @@ class Command(BaseCommand):
                 + " This admin is publicly reachable; set a strong password in the "
                 "hosting dashboard and redeploy."
             ) from exc
-
-        if User.objects.filter(username=username).exists():
-            # Idempotent, and deliberately NOT a password reset. A deploy that
-            # silently rewrote an existing admin's password on every restart
-            # would be a credential-rotation mechanism nobody asked for.
-            self.stdout.write(f"bootstrap: superuser '{username}' already exists — unchanged.")
-            return
 
         User.objects.create_superuser(username=username, email=email or "", password=password)
         self.stdout.write(self.style.SUCCESS(f"bootstrap: created superuser '{username}'."))

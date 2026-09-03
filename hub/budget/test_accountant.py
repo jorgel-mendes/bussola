@@ -13,7 +13,12 @@ from decimal import Decimal
 import pytest
 
 from budget.accountant import budget_for, spend
-from budget.exceptions import BudgetExhausted, BudgetNotConfigured, UnsupportedAccountant
+from budget.exceptions import (
+    BudgetExhausted,
+    BudgetNotConfigured,
+    CrossCollaborationSpend,
+    UnsupportedAccountant,
+)
 from budget.models import Accountant, BudgetPeriod, LedgerEntry
 
 pytestmark = pytest.mark.django_db
@@ -243,3 +248,115 @@ def test_an_outer_rollback_discards_a_successful_spend(budget, cohort, metric):
 
     assert LedgerEntry.objects.count() == 0
     assert budget.spent() == Decimal("0")
+
+
+# --- the tenancy boundary, in its budget form -----------------------------
+#
+# Found in review of PR #1: spend() takes budget_period, cohort and metric as
+# independent arguments and originally verified nothing about them agreeing.
+# Every other part of this codebase enforces the invariant --
+# compute_exact_benchmark refuses across collaborations, Submission.clean has
+# it as RULE 3 -- and the privacy-critical function was the one that omitted it.
+#
+# The tests below assert the mismatch is REFUSED. The pre-existing
+# test_budgets_of_separate_collaborations_are_independent asserts only that two
+# budgets do not affect each other, which is a different and weaker claim: it
+# passes happily while a cross-tenant spend is being written.
+
+
+@pytest.fixture
+def foreign(db, other_collaboration):
+    """A cohort, metric and period belonging to a different collaboration."""
+    from datetime import date
+
+    from catalog.models import MetricDefinition, Statistic
+    from collaborations.models import Cohort
+    from ingest.models import ReportingPeriod
+
+    cohort = Cohort.objects.create(
+        collaboration=other_collaboration, code="8610", name="Hospital sites"
+    )
+    metric = MetricDefinition.objects.create(
+        collaboration=other_collaboration,
+        code="length_of_stay",
+        name="Mean length of stay",
+        unit="days",
+        lower_bound=Decimal("0.5"),
+        upper_bound=Decimal("30"),
+        bounds_rationale="Clinical admission limits from published guidance.",
+        contributions_per_period=1,
+        statistics=[Statistic.MEDIAN],
+    )
+    period = ReportingPeriod.objects.create(
+        collaboration=other_collaboration,
+        label="2026-07",
+        starts=date(2026, 7, 1),
+        ends=date(2026, 8, 1),
+    )
+    budget = BudgetPeriod.objects.create(period=period, epsilon_total=Decimal("1.0000"))
+    return {"cohort": cohort, "metric": metric, "period": period, "budget": budget}
+
+
+def test_a_foreign_cohort_cannot_be_charged_to_this_budget(budget, metric, foreign):
+    """One collaboration's budget must not pay for another's cohort."""
+    with pytest.raises(CrossCollaborationSpend):
+        spend(
+            budget_period=budget,
+            cohort=foreign["cohort"],
+            metric=metric,
+            statistic="median",
+            mechanism="exponential",
+            epsilon=Decimal("0.100000"),
+        )
+
+    assert LedgerEntry.objects.count() == 0
+    assert budget.spent() == Decimal("0")
+
+
+def test_a_foreign_metric_cannot_be_charged_to_this_budget(budget, cohort, foreign):
+    with pytest.raises(CrossCollaborationSpend):
+        spend(
+            budget_period=budget,
+            cohort=cohort,
+            metric=foreign["metric"],
+            statistic="median",
+            mechanism="exponential",
+            epsilon=Decimal("0.100000"),
+        )
+
+    assert LedgerEntry.objects.count() == 0
+
+
+def test_a_foreign_budget_cannot_be_charged_for_local_data(cohort, metric, foreign):
+    """The other direction: our cohort must not draw down their epsilon."""
+    with pytest.raises(CrossCollaborationSpend):
+        spend(
+            budget_period=foreign["budget"],
+            cohort=cohort,
+            metric=metric,
+            statistic="median",
+            mechanism="exponential",
+            epsilon=Decimal("0.100000"),
+        )
+
+    assert foreign["budget"].spent() == Decimal("0")
+
+
+def test_a_fully_foreign_call_is_still_consistent_and_permitted(foreign):
+    """The check refuses disagreement, not foreignness.
+
+    A release entirely within the other collaboration is legitimate and must
+    still work -- otherwise the guard would break multi-tenancy rather than
+    protect it.
+    """
+    entry = spend(
+        budget_period=foreign["budget"],
+        cohort=foreign["cohort"],
+        metric=foreign["metric"],
+        statistic="median",
+        mechanism="exponential",
+        epsilon=Decimal("0.100000"),
+    )
+
+    assert entry.pk is not None
+    assert foreign["budget"].spent() == Decimal("0.100000")
