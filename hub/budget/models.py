@@ -172,9 +172,16 @@ class LedgerEntry(models.Model):
     budget_period = models.ForeignKey(
         BudgetPeriod, on_delete=models.PROTECT, related_name="entries"
     )
-    # The release FK lands with BenchmarkRelease on day 3 and will be NOT NULL,
-    # deviating from SPEC section 5.4's null=True: a nullable release column
-    # permits exactly the orphaned-spend state the invariant forbids.
+    # NOT NULL, deviating from SPEC section 5.4's null=True. That nullable
+    # column permits exactly the state the whole system forbids: an epsilon
+    # spend with no release attached is unaccounted privacy loss, and a release
+    # with no spend is disclosure nobody was charged for. Making the column
+    # required means the database refuses the first case outright, and
+    # `benchmarks.releases` writing both inside one transaction refuses the
+    # second.
+    release = models.ForeignKey(
+        "benchmarks.BenchmarkRelease", on_delete=models.PROTECT, related_name="ledger_entries"
+    )
     metric = models.ForeignKey(
         "catalog.MetricDefinition", on_delete=models.PROTECT, related_name="ledger_entries"
     )

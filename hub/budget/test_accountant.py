@@ -29,6 +29,23 @@ def budget(period) -> BudgetPeriod:
     return BudgetPeriod.objects.create(period=period, epsilon_total=Decimal("1.0000"))
 
 
+def make_release(cohort, metric, period, n=8):
+    from benchmarks.models import BenchmarkRelease
+
+    existing = BenchmarkRelease.objects.filter(
+        cohort=cohort, metric=metric, period=period
+    ).first()
+    if existing:
+        return existing
+    return BenchmarkRelease.objects.create(
+        period=period,
+        cohort=cohort,
+        metric=metric,
+        n_contributors=n,
+        epsilon_spent=Decimal("1.000000"),
+    )
+
+
 def charge(budget, cohort, metric, epsilon, statistic="median") -> LedgerEntry:
     return spend(
         budget_period=budget,
@@ -37,6 +54,7 @@ def charge(budget, cohort, metric, epsilon, statistic="median") -> LedgerEntry:
         statistic=statistic,
         mechanism="exponential",
         epsilon=Decimal(epsilon),
+        release=make_release(cohort, metric, budget.period),
     )
 
 
@@ -307,6 +325,7 @@ def test_a_foreign_cohort_cannot_be_charged_to_this_budget(budget, metric, forei
             statistic="median",
             mechanism="exponential",
             epsilon=Decimal("0.100000"),
+            release=make_release(foreign["cohort"], metric, budget.period),
         )
 
     assert LedgerEntry.objects.count() == 0
@@ -322,6 +341,7 @@ def test_a_foreign_metric_cannot_be_charged_to_this_budget(budget, cohort, forei
             statistic="median",
             mechanism="exponential",
             epsilon=Decimal("0.100000"),
+            release=make_release(cohort, foreign["metric"], budget.period),
         )
 
     assert LedgerEntry.objects.count() == 0
@@ -337,6 +357,7 @@ def test_a_foreign_budget_cannot_be_charged_for_local_data(cohort, metric, forei
             statistic="median",
             mechanism="exponential",
             epsilon=Decimal("0.100000"),
+            release=make_release(cohort, metric, foreign["period"]),
         )
 
     assert foreign["budget"].spent() == Decimal("0")
@@ -356,6 +377,7 @@ def test_a_fully_foreign_call_is_still_consistent_and_permitted(foreign):
         statistic="median",
         mechanism="exponential",
         epsilon=Decimal("0.100000"),
+        release=make_release(foreign["cohort"], foreign["metric"], foreign["period"]),
     )
 
     assert entry.pk is not None

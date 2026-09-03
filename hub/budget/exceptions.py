@@ -62,3 +62,13 @@ class CrossCollaborationSpend(BudgetError):
     A distinct exception rather than ValueError because a caller catching this
     is handling a tenancy fault, not a bad argument.
     """
+
+
+class ReleaseMismatch(BudgetError):
+    """A spend was attached to a release for a different cell.
+
+    The ledger answers "what did this epsilon buy?". If an entry can point at a
+    release for another cohort, metric or period, that answer is wrong while
+    every total still balances -- the worst shape of audit defect, because
+    nothing looks broken.
+    """

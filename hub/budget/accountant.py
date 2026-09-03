@@ -27,6 +27,7 @@ from budget.exceptions import (
     BudgetExhausted,
     BudgetNotConfigured,
     CrossCollaborationSpend,
+    ReleaseMismatch,
 )
 from budget.models import BudgetPeriod, LedgerEntry
 
@@ -55,6 +56,7 @@ def spend(
     statistic: str,
     mechanism: str,
     epsilon: Decimal,
+    release,
 ) -> LedgerEntry:
     """Charge ``epsilon`` against a period's budget, or refuse.
 
@@ -65,6 +67,10 @@ def spend(
     but it joins an outer atomic block when one is open -- which is exactly how
     the release path uses it, so that a committed release and its ledger entry
     are the same commit.
+
+    ``release`` is required, not optional. SPEC section 5.4 has it nullable; a
+    nullable release column permits an epsilon spend attached to no disclosure,
+    which is the unaccounted-privacy state this system exists to prevent.
 
     Keyword-only on purpose: a positional call site that swapped ``cohort`` and
     ``metric``, or ``statistic`` and ``mechanism``, would still run and would
@@ -104,6 +110,19 @@ def spend(
             f"Got collaboration ids {sorted(collaboration_ids)}."
         )
 
+    # The ledger answers "what did this epsilon buy?". An entry pointing at a
+    # release for a different cell answers it wrongly while every total still
+    # balances, which is the audit defect hardest to notice.
+    if (release.cohort_id, release.metric_id, release.period_id) != (
+        cohort.pk,
+        metric.pk,
+        locked.period_id,
+    ):
+        raise ReleaseMismatch(
+            f"Ledger entry for {cohort.code}/{metric.code} cannot be attached to "
+            f"release {release.pk}, which covers a different cell."
+        )
+
     already = LedgerEntry.objects.filter(budget_period=locked).aggregate(
         total=Sum("epsilon_spent")
     )["total"] or Decimal("0")
@@ -114,6 +133,7 @@ def spend(
 
     return LedgerEntry.objects.create(
         budget_period=locked,
+        release=release,
         cohort=cohort,
         metric=metric,
         statistic=statistic,

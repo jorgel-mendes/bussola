@@ -47,6 +47,24 @@ pytestmark = [
 ]
 
 
+def _make_release(budget, cohort, metric):
+    """One release, shared by every racing thread.
+
+    Created before the race so that all threads contend on the budget row and
+    nothing else -- creating it inside the workers would race on the unique
+    constraint instead and test the wrong thing.
+    """
+    from benchmarks.models import BenchmarkRelease
+
+    return BenchmarkRelease.objects.create(
+        period=budget.period,
+        cohort=cohort,
+        metric=metric,
+        n_contributors=8,
+        epsilon_spent=Decimal("1.000000"),
+    )
+
+
 def _race(budget, cohort, metric, *, threads: int, epsilon: Decimal):
     """Fire `threads` simultaneous spends of `epsilon`, return (ok, refused).
 
@@ -54,6 +72,7 @@ def _race(budget, cohort, metric, *, threads: int, epsilon: Decimal):
     first thread routinely finishes before the last one starts, the lock is
     never contended, and the test silently stops testing anything.
     """
+    release = _make_release(budget, cohort, metric)
     gate = threading.Barrier(threads)
     outcomes: list[str] = []
     lock = threading.Lock()
@@ -69,6 +88,7 @@ def _race(budget, cohort, metric, *, threads: int, epsilon: Decimal):
                     statistic=f"q{index}",
                     mechanism="exponential",
                     epsilon=epsilon,
+                    release=release,
                 )
                 result = "ok"
             except BudgetExhausted:
@@ -136,6 +156,7 @@ def test_a_single_oversized_release_cannot_slip_through_under_contention(
     combination is legal as long as the total fits; the assertion is on the
     sum, not on which requests won.
     """
+    release = _make_release(budget, cohort, metric)
     gate = threading.Barrier(6)
     outcomes: list[str] = []
     lock = threading.Lock()
@@ -151,6 +172,7 @@ def test_a_single_oversized_release_cannot_slip_through_under_contention(
                     statistic="median",
                     mechanism="exponential",
                     epsilon=epsilon,
+                    release=release,
                 )
                 r = "ok"
             except BudgetExhausted:

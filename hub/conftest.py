@@ -128,3 +128,22 @@ def make_contributors(db, collaboration, cohort):
         return made
 
     return _make
+
+
+@pytest.fixture
+def release(db, cohort, metric, period):
+    """A BenchmarkRelease for the standard cell.
+
+    Ledger entries are NOT NULL on `release`, so anything exercising the
+    accountant needs one. Deliberately a real row rather than a mock: the
+    accountant checks that the entry's cell matches the release's.
+    """
+    from benchmarks.models import BenchmarkRelease
+
+    return BenchmarkRelease.objects.create(
+        period=period,
+        cohort=cohort,
+        metric=metric,
+        n_contributors=8,
+        epsilon_spent=Decimal("1.000000"),
+    )
