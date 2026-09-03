@@ -229,3 +229,35 @@ def test_a_release_cannot_be_deleted_while_ledger_entries_point_at_it(budget, ce
 
     with pytest.raises((ProtectedError, NotImplementedError)):
         outcome.release.delete()
+
+
+# --- tenancy -------------------------------------------------------------
+
+
+def test_a_cross_collaboration_cell_is_refused_with_the_documented_exception(
+    budget, cell, other_collaboration
+):
+    """Found in review of PR #2: the docstring promised CrossCollaborationSpend
+    and the code raised ValueError.
+
+    The type matters to callers, not just the message. A view catching
+    CrossCollaborationSpend to render "this cell spans two groups" would have
+    caught nothing, and the ValueError would have surfaced as a 500.
+    """
+    from budget.exceptions import CrossCollaborationSpend
+    from collaborations.models import Cohort
+
+    foreign_cohort = Cohort.objects.create(
+        collaboration=other_collaboration, code="8610", name="Hospital sites"
+    )
+
+    with pytest.raises(CrossCollaborationSpend):
+        release_benchmark(
+            cohort=foreign_cohort,
+            metric=cell["metric"],
+            period=cell["period"],
+            epsilon=Decimal("1.500000"),
+        )
+
+    assert BenchmarkRelease.objects.count() == 0
+    assert LedgerEntry.objects.count() == 0

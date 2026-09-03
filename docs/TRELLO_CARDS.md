@@ -186,6 +186,47 @@ The §3 listings above already use the corrected names.
 
 ---
 
+## 5b. Deferred — statistical depth (Sprint 3 or post-submission)
+
+Added during Sprint 2 day 3. Recorded here rather than done, because the sprint
+is one week and this is the part that can be strengthened later without
+invalidating anything built on it.
+
+### S3-8 — Deepen the mechanism calibration tests · `sprint-3`
+
+`hub/privacy/test_mechanisms.py` currently proves the *direction* of the
+privacy--utility relationship: repeated releases of identical data disagree,
+and the spread widens as epsilon falls. That is enough to catch the defect
+class that matters most -- a mechanism that runs, returns plausible numbers and
+applies no noise at all -- and it was verified to do so by planting exactly
+that bug.
+
+What it does NOT do is check the empirical distribution against theory, which
+is what SPEC section 7.5 describes and what the Sprint 2 plan originally scoped
+at 10,000 trials per mechanism.
+
+```
+Raise trial counts toward the SPEC 7.5 figure (10,000 per mechanism)
+Assert the empirical distribution matches the exponential mechanism's theory,
+  not merely that spread responds to epsilon
+Test q25 and q75 as well as the median
+Add the same depth for count and mean when those mechanisms are registered
+Move the slow statistical tests to their own CI job or a pytest marker
+```
+
+**Why it was cut, honestly:** the trial count is the cost. Each OpenDP release
+takes roughly 450 ms, and context reuse was measured and gives no speedup at
+all (1.0x) -- the cost is in the release, not in building the compositor. The
+current ~155 releases per run already take 9m26s on CI. Ten thousand trials per
+mechanism is a separate CI job, not a tighter loop.
+
+**Why cutting it is defensible:** the cheap directional tests catch the
+catastrophic failure. Distribution-matching catches a subtler one -- a
+mechanism noised on the wrong scale -- which is worth having and is not worth a
+day of a five-day sprint.
+
+---
+
 ## 6. Cards to mark `privacy-critical`
 
 Red. A defect here does not merely produce a wrong number — it voids the

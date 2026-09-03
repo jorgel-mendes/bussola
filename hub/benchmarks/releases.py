@@ -39,6 +39,7 @@ from django.db import transaction
 from benchmarks.models import BenchmarkRelease, ReleasedStatistic
 from benchmarks.selectors import submissions_for
 from budget.accountant import budget_for, spend
+from budget.exceptions import CrossCollaborationSpend
 from privacy.mechanisms import get_mechanism, is_supported
 
 dp.enable_features("contrib")
@@ -107,9 +108,19 @@ def release_benchmark(*, cohort, metric, period, epsilon: Decimal) -> ReleaseOut
     case nothing is written at all. Raises CrossCollaborationSpend if the cell's
     parts belong to different collaborations.
     """
+    # CrossCollaborationSpend, not ValueError: this is the same tenancy fault
+    # that budget.accountant.spend() raises, and a caller handling one should
+    # handle the other. The docstring above promises this type, and an error
+    # contract that disagrees with its own documentation is worse than either
+    # choice made consistently.
+    #
+    # Note that benchmarks.selectors.compute_exact_benchmark still raises
+    # ValueError for the same condition. That is left alone deliberately: it
+    # never spends budget, it has no business importing from `budget`, and it is
+    # the Sprint 1 exact path being retired in day 4.
     collaboration_ids = {cohort.collaboration_id, metric.collaboration_id, period.collaboration_id}
     if len(collaboration_ids) > 1:
-        raise ValueError(
+        raise CrossCollaborationSpend(
             "Cohort, metric and period must belong to the same collaboration. "
             "Releasing across collaborations would mix separate privacy budgets."
         )
