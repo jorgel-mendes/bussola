@@ -2,7 +2,7 @@
 
 **Bússola — Privacy-Preserving Benchmarking Platform**
 Quantic MSSE Capstone · Jorge Luis dos Santos Mendes
-Status: **Sprint 1 of 3** · Last updated: Sprint 1
+Status: **Sprint 2 of 3 complete** · Last updated: end of Sprint 2
 
 > This document is a required deliverable. It records design and architecture
 > decisions with reasons, patterns used and why, deployment options with cost
@@ -56,7 +56,7 @@ The worked example throughout — and in the seeded demo — is industrial
 benchmarking, because the domain knowledge behind the bounds rationales is real
 and a concrete demonstration beats an abstract one.
 
-### Sprint 1 status
+### Status
 
 Sprint 1 delivers the **thin slice**: a contributor agent submits over the
 network to a deployed hub, and an *exact* cohort benchmark appears on a dashboard
@@ -189,8 +189,8 @@ Neither is on the critical path; ledger integrity is.
 | **Repository / selectors** | `benchmarks/selectors.py` | Keeps aggregation logic out of views. In Sprint 2 the DP release path replaces the function body without touching the view — the signature was designed to survive that change. |
 | **DTO / contract** | `contracts/bussola_contracts` | One definition of the wire format, imported by two independently deployed programs. Enables a real contract test. |
 | **Data-driven configuration** | `catalog.MetricDefinition` | Bounds, privacy unit and statistic list are data, scoped per collaboration. Adding a metric is an admin operation, not a code change; changing vertical is a catalog change, not a fork. |
-| **Strategy + Registry** (Sprint 2) | `privacy/mechanisms/` | One class per statistic type, selected from the catalog, so adding a statistic is a registration rather than an `if/elif` chain. |
-| **Append-only ledger** (Sprint 2) | `budget.LedgerEntry` | Auditability. Entries are never updated or deleted. |
+| **Strategy + Registry** | `privacy/mechanisms/` | One class per statistic type, selected from the catalog, so adding a statistic is a registration rather than an `if/elif` chain. |
+| **Append-only ledger** | `budget.LedgerEntry` | Auditability. Entries are never updated or deleted. |
 | **Twelve-factor config** | `config/settings/` + `django-environ` | The same image runs locally, in CI and on Render. |
 
 ### 3.4 Key data-model decisions
@@ -252,80 +252,163 @@ must look at this".
 
 ## 4. Testing
 
-**95 tests passing at end of Sprint 1.** Lint (`ruff`) clean.
+**275 tests passing at end of Sprint 2** (144 at end of Sprint 1) on Postgres;
+269 passing plus 6 correctly skipped on SQLite. Lint (`ruff`) clean.
 
 Several tests defend **privacy invariants** rather than mere correctness, and
 their docstrings say which invariant and why — so a future change that breaks
 one fails with an explanation rather than a red dot.
 
-### 4.1 Categories
+### 4.1 The method: plant the defect
 
-| Category | Location | Count | Purpose |
-|---|---|---|---|
-| Model constraints | `hub/catalog/test_models.py`, `hub/ingest/test_models.py` | 18 | DB-level enforcement of bounds ordering, rationale presence, submission uniqueness, positive record counts |
-| API / authentication / tenancy | `hub/ingest/test_submissions_api.py` | 24 | Token rejection paths, plant-identity-from-token, idempotency, bounds rejection, period state |
-| Contract | `hub/ingest/test_contract.py` | 8 | Agent DTO ↔ hub serializer, asserted structurally (field sets) rather than by one happy example |
-| Benchmark computation | `hub/benchmarks/test_selectors.py` | 11 | Quartiles on a hand-checkable series, suppression threshold, sector isolation, quartile assignment |
-| Agent — local compute | `agent/tests/test_compute.py` | 13 | Period filtering, missing data, bounds check and its error message |
-| Agent — HTTP client | `agent/tests/test_client.py` | 9 | The retryable/non-retryable split per status code |
-| Agent — CLI | `agent/tests/test_cli.py` | 9 | Exit codes, dry-run sends nothing, local failure precedes network call |
-| Naming drift | `hub/test_naming_drift.py` | 51 | Enforces the frozen domain vocabulary. Verified to fail on a planted violation rather than pass vacuously. |
+The single most useful testing practice in this project is not a category of
+test. It is a habit: **after writing a test, break the thing it guards and
+confirm it fails.**
 
-### 4.2 Notable tests and why they exist
+Sprint 1 shipped five defects, and three were invisible because *something
+still looked fine* — a clean exit code, a plausible number. A test that has
+never been observed failing is indistinguishable from a test that cannot fail.
 
-- **`test_resubmission_updates_in_place`** — defends the sensitivity bound. If
-  this fails, the privacy guarantee is void, not merely inconvenient.
-- **`test_contributor_is_taken_from_token_not_body`** — injects a foreign
-  contributor id into the payload and asserts it is ignored.
-- **`test_cannot_submit_against_another_collaborations_metric`** — the tenancy
-  boundary. A foreign metric code must be indistinguishable from a nonexistent
-  one, so the response does not reveal what other groups measure.
-- **`test_ack_field_names_match_the_hub_serializer`** — added after the
-  `plant`→`contributor` rename broke exactly this boundary at runtime.
-- **`test_raw_token_is_never_stored`** — a database dump must not yield usable
-  credentials.
-- **`test_out_of_bounds_value_is_rejected_not_clamped`** — pins the decision in
-  §3.4 so a future "helpful" clamp cannot be added silently.
-- **`test_dry_run_sends_nothing`** — asserts the submissions endpoint is *never
-  called*, not merely that output looks right. Dry-run is the feature that earns
-  operator trust; it must be provably inert.
-- **`test_other_cohorts_do_not_leak_into_a_benchmark`** and
-  **`test_refuses_to_compute_across_collaborations`** — contamination across a
-  cohort or a collaboration boundary would be a disclosure, not just a wrong
-  number. The latter also protects the Sprint 2 budget from being drawn down by
-  the wrong group.
-- **`test_agent_payload_fields_match_serializer_fields`** — structural contract
-  assertion in both directions, so adding a field to one side without the other
-  fails immediately.
+Applied throughout Sprint 2, it found four cases where a test was not testing
+what its name claimed:
 
-### 4.3 Test infrastructure decisions
+| Planted defect | Result | What it revealed |
+|---|---|---|
+| Remove `select_for_update()` from the accountant | Caught — `ledger sums to 0.900000 against a budget of 0.7000` | The concurrency test works; a silent 29% over-release |
+| Write the ledger entry *before* the budget check | **Passed** | The refusal test passes because of transaction rollback, not statement order. Rollback was load-bearing and untested, so it got its own tests |
+| Accept `remaining × 1.0001` (an off-by-one) | **Passed** | Property-based testing explores the space but never lands on the boundary. Two boundary-targeted properties were added |
+| Return the *true* quantile from the mechanism | Caught by 5 tests — but only after the weak test was replaced | See below |
 
-**CI runs Postgres, not SQLite.** The Sprint 2 budget accountant depends on
+That last one is the important one. The original test compared a released
+quantile against the exact one and asserted they differed. **It proved
+nothing:** the exponential mechanism selects from a 200-point candidate grid
+while the exact quantile interpolates between observed values, so the two
+differ *even with no noise applied at all*. It would have passed against a
+mechanism providing zero privacy. It was replaced with tests that check
+randomness as randomness — 30 releases of identical data must not all agree,
+and the spread must widen as epsilon falls.
+
+**The generalisable lesson:** a test that a DP output "looks different from the
+true value" is not evidence of privacy. Only variation across repeated releases
+is.
+
+### 4.2 Categories
+
+| Category | Location | Purpose |
+|---|---|---|
+| Model constraints | `catalog/test_models.py`, `ingest/test_models.py`, `budget/test_models.py` | DB-level enforcement of bounds ordering, rationale presence, submission uniqueness, positive epsilon |
+| API / authentication / tenancy | `ingest/test_submissions_api.py` | Token rejection paths, contributor-identity-from-token, idempotency, bounds rejection, period state |
+| Contract | `ingest/test_contract.py` | Agent DTO ↔ hub serializer, asserted structurally rather than by one happy example |
+| **Concurrency** | `budget/test_concurrency.py` | K parallel releases against a budget affording K−1. **Requires Postgres**; skips on SQLite and the build fails if it skips where it should not |
+| **Property-based** (`hypothesis`) | `budget/test_properties.py` | Over random sequences of release requests, the ledger sum never exceeds the budget — plus boundary-targeted properties, because random generation does not aim at boundaries |
+| **Mechanism / statistical** | `privacy/test_mechanisms.py` | That noise is applied at all, and that its spread responds to epsilon. Catches the defect class where code runs, returns plausible numbers, and provides no privacy |
+| **Release invariant** | `benchmarks/test_releases.py` | The release and its ledger entries are written in one transaction, asserted in *both* directions |
+| **Immutability** | `budget/test_models.py`, `benchmarks/test_releases.py` | Append-only ledger and immutable releases, including the QuerySet bulk paths that bypass `save()` |
+| Dashboard / disclosure | `benchmarks/test_views.py` | That no individual contributor value is reachable, and that viewing spends no budget |
+| Agent (compute, HTTP, CLI) | `agent/tests/` | Period filtering, bounds check, the retryable/non-retryable status split, exit codes, inert dry-run |
+| Naming drift | `test_naming_drift.py` | Enforces the frozen domain vocabulary. Verified to fail on a planted violation |
+| **Environment guard** | `test_postgres_guard.py` | Fails the build when tests that must run were skipped instead |
+
+### 4.3 Notable tests and why they exist
+
+- **`test_k_parallel_releases_against_a_budget_affording_k_minus_one`** — the
+  flagship. Two simultaneous releases against a budget with room for one will
+  both read "epsilon remaining", both decide they can afford it, and both
+  write. Nothing errors, the ledger balances against itself, and the guarantee
+  is void. There is no way to catch that by reading code or with a sequential
+  test. A `Barrier` is used rather than merely starting threads: without it the
+  first finishes before the last starts and the lock is never contended.
+- **`test_every_released_statistic_has_a_ledger_entry`** and
+  **`test_every_ledger_entry_has_a_release`** — the invariant in both
+  directions. A release with no entry is unaccounted privacy loss; an entry
+  with no release is a charge for a disclosure nobody received. The first is
+  the serious one.
+- **`test_rendering_the_page_spends_no_budget`** — if viewing released
+  statistics, a refresh would spend epsilon and a crawler would exhaust a
+  collaboration's annual allowance in seconds.
+- **`test_no_individual_contributor_value_is_reachable`** — the inverted form
+  of a Sprint 1 test that *asserted the leak was present*, so that removing it
+  had to be a deliberate edit to a documented expectation rather than a silent
+  deletion.
+- **`test_one_unit_past_the_remaining_budget_is_refused`** — added after a
+  planted off-by-one survived every other property.
+- **`test_repeated_releases_of_identical_data_do_not_agree`** — the single most
+  important assertion about the mechanism. If 30 releases of the same data all
+  return the same number, there is no privacy however plausible it looks.
+- **`test_the_seeded_split_matches_datagen`** — `seed_demo` and `datagen` carry
+  separate copies of the cohort weights. If they drift, the seeded roster and
+  the generated data describe different consortia and every benchmark is
+  computed over the wrong cohort.
+- **`test_an_unimplemented_accountant_raises_rather_than_falling_back`** — a
+  zCDP budget accounted as basic composition would report the wrong remaining
+  epsilon. A loud refusal beats a plausible wrong number.
+
+### 4.4 Test infrastructure decisions
+
+**CI runs Postgres, not SQLite.** The budget accountant depends on
 `select_for_update()`, which is a **no-op on SQLite** — the concurrency tests
-would pass vacuously and the guarantee would be unverified. Local development
-may use SQLite for speed; `config.settings.test.using_postgres()` lets tests
-that require real row-level locking skip explicitly rather than silently.
+would pass vacuously and the guarantee would be unverified.
+
+**A skip is green, and that is the problem.** Skipping the concurrency tests on
+SQLite is correct locally. In CI it is a disaster waiting to happen: a mistyped
+`DATABASE_URL` or a Postgres service that failed to start would reduce the
+project's most important test to four skips and a green tick nobody looks at
+again. CI sets `BUSSOLA_REQUIRE_POSTGRES=1` and `test_postgres_guard.py` turns
+that silence into a build failure. This is retro action A3 — "treat *looks
+fine* as unverified" — expressed as code rather than as an intention.
 
 **Synthetic data is a methodological requirement, not a convenience.** The
-Sprint 2 privacy–utility evaluation measures noisy released statistics against
-true ones, so ground truth must be known. `datagen/generate.py` persists
-`ground_truth.json` for exactly this. Real plant data would make the evaluation
-impossible.
+privacy–utility evaluation measures noisy released statistics against true
+ones, so ground truth must be known. `datagen/generate.py` persists
+`ground_truth.json` for exactly this. Real plant data would make the
+measurement impossible.
 
-**CI also checks for missing migrations** (`makemigrations --check`) and runs
-`manage.py check --deploy --fail-level WARNING` against production settings, so
-a security misconfiguration fails the build rather than reaching Render.
+**The demo consortium is deliberately uneven — 50/50/6.** An even split cannot
+express "this cell cannot support a release", which is the case the privacy
+story most needs to demonstrate and the harder half to fake. See §4.5.
 
-### 4.4 Planned for Sprint 2
+**CI also checks for missing migrations** and runs `manage.py check --deploy
+--fail-level WARNING` against production settings.
+
+**Cost, stated:** the suite takes ~9m30s on CI, up from ~1m20s. The mechanism
+tests run OpenDP roughly 155 times at ~450 ms per release. Context reuse was
+measured and gives no speedup (1.0×) — the cost is in the release itself, not
+in building the compositor. Deepening these toward SPEC §7.5's 10,000 trials is
+recorded as `S3-8`, and needs its own CI job rather than a tighter loop.
+
+### 4.5 What the tests found that design review did not
+
+The release path was run end to end against the reseeded 106-contributor demo.
+Median absolute values, one period, ε = 1.0 per cell:
+
+| Cohort | N | q25 | median | q75 | |
+|---|---|---|---|---|---|
+| `2011` | 50 | 3182.2 | 3504.2 | 6187.6 | ok |
+| `2320` | 47 | 2001.5 | 3423.7 | 4577.6 | ok |
+| `2farm` | 6 | **131.8** | 171.9 | **126.1** | **q75 < q25** |
+
+**At N = 6 the released third quartile came out below the first.** Each
+quantile is drawn independently by the exponential mechanism, so at small N the
+noise exceeds the spacing between them and the ordering inverts. Both
+50-contributor cohorts were clean.
+
+This is the ADR-0003 utility floor arriving as a visibly broken number rather
+than as a table in a document. `BenchmarkRelease.quantiles_are_ordered` detects
+it and the dashboard says the release is too noisy to use.
+
+**It is deliberately not fixed by sorting.** Sorting would be privacy-safe —
+differential privacy is closed under post-processing — but it would conceal the
+one signal telling a member not to trust the release, replacing a visibly
+broken number with an invisibly meaningless one.
+
+### 4.6 Planned for Sprint 3
 
 | Category | Purpose |
 |---|---|
-| **Concurrency** | K parallel releases against a budget affording K−1; assert exactly one `BudgetExhausted` and `SUM(epsilon) ≤ total`. Requires `TransactionTestCase` and real threads. |
-| **Property-based** (`hypothesis`) | Over *random* sequences of release requests, the ledger sum never exceeds the budget. This is the correctness property the system exists to guarantee, so it deserves generated inputs rather than three hand-written cases. |
-| **Statistical calibration** | Run each mechanism 10,000 times at fixed ε; assert empirical noise distribution matches theory. Catches the class of bug where code runs, returns plausible numbers, and provides no privacy at all. |
-| **Regression** | Golden-file outputs under a fixed seed — in tests only, never in production releases. |
-
----
+| **Statistical calibration at depth** (`S3-8`) | Assert the empirical distribution matches the exponential mechanism's theory, not merely that spread responds to epsilon. Needs its own CI job |
+| **Privacy–utility sweep** | SPEC §8, over ε × N × statistic, emitting a CSV that serves both the design document and the results charts |
+| **Accuracy intervals** (`S2-5`) | Derived by simulation, since `summarize()` returns none for the exponential mechanism |
+| **Regression** | Golden-file outputs under a fixed seed — in tests only, never in production releases |
 
 ## 5. CI/CD
 
@@ -405,13 +488,65 @@ Five defects shipped and were caught by running things rather than reading them;
 the OpenDP spike (`evaluation/spike_opendp.py`) ran before the sprint closed and
 surfaced a hard Polars version conflict plus the measured privacy-utility floor.
 
-### Sprint 2 — the privacy core (planned)
+### Sprint 2 — the privacy core ✅
 
-OpenDP integration · per-collaboration, per-period epsilon budget · append-only ledger · release
-refusal on exhaustion · accuracy estimates before release · budget splitting
-across statistics · concurrency and property-based tests.
+**Goal:** every published statistic is differentially private, every epsilon
+spend is recorded in an append-only ledger, and no release can exceed its
+collaboration's budget for the period. **Met.**
+
+Compressed from four weeks to one. The plan was re-cut rather than shaved:
+roughly 75% of the original scope was dropped explicitly, and what was dropped
+is recorded below rather than left implied.
+
+Delivered: `BudgetPeriod` and append-only `LedgerEntry` · the accountant's
+critical section under `select_for_update()` · concurrency and property-based
+tests on Postgres · a CI guard that fails when those tests skip · quantile
+mechanisms behind a Strategy + Registry · `BenchmarkRelease` and
+`ReleasedStatistic` as immutable snapshots · the release and its ledger entries
+in one transaction, with `LedgerEntry.release` NOT NULL · suppression ahead of
+the DP path · the per-contributor disclosure removed · the dashboard rendering
+published releases only · deployment to Render.
+
+**Order was deliberate.** The ledger and accountant were built first, with no
+OpenDP anywhere in the tree — pure Django, fully testable without any
+differential privacy. If the library had fought us, there would still have been
+a working, auditable budget system. (REVIEW §F2's week table says the opposite
+and is wrong; see the note there.)
+
+**Two defects found in the surface work, neither in the plan.** The
+per-contributor `<details>` block was the known leak. The chart *also* plotted
+Minimum and Maximum — two individual contributors' exact values under a
+friendlier label. Removing the known leak alone would have left a direct
+disclosure in place.
+
+**Cut, and why:**
+
+| Cut | Reason |
+|---|---|
+| Count, mean and stddev mechanisms | Far worse value per unit of epsilon (SPEC §6.1). At ε=1 split three ways a DP mean's interval came back wider than the sum being estimated. Shipping only the statistic that works is a position, not a gap |
+| Accuracy intervals (`S2-5`) | `summarize()` returns none for the exponential mechanism (ADR-0003 finding 4). Needs simulation; deferred to Sprint 3 |
+| 10,000-trial calibration (`S3-8`) | ~450 ms per release, and context reuse measured at 1.0× speedup. Needs its own CI job, not a tighter loop |
+| zCDP accountant | Basic composition can be checked with a calculator and explained on camera. `BudgetPeriod.accountant` carries the choice and refuses loudly rather than mis-accounting |
+
+**Also delivered, unplanned:** `bootstrap_deploy` (Render's free tier has no
+shell, so first-run setup happens at boot), `load_submissions` and
+`release_period`, and the unusable-release warning described in §4.5.
+
+**Two defects fixed that the product's own thesis condemned:** `seed_demo`
+printed raw contributor API tokens to stdout, which at container boot means a
+retained deploy log; and `create_superuser()` bypasses
+`AUTH_PASSWORD_VALIDATORS`, so a deploy could stand up an internet-reachable
+admin with `admin`/`admin` and report success.
+
+**Carried to Sprint 3:** `S2-5` (accuracy intervals), `S3-8` (calibration
+depth), `S1-13` (invite `quantic-grader`).
 
 ### Sprint 3 — product surface and evidence (planned)
 
-Plant self-service position view · confidence intervals on every published
-value · privacy–utility curve in the dashboard · ledger CSV export · final demo.
+Contributor self-service position view · accuracy intervals on every published
+value (`S2-5`) · privacy–utility sweep from SPEC §8 · ledger CSV export for the
+Auditor · calibration depth (`S3-8`) · final demo recording.
+
+One week, so the same discipline applies: the graded deliverables — final
+design document, business-first README and presentation, and the 15–20 minute
+recording — take the back half, leaving roughly three days of feature work.

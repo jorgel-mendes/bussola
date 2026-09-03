@@ -243,6 +243,28 @@ budget again and produces a different number.
 
 ## F2. Week-by-week
 
+> **Corrected after the fact — read this before the table below.**
+>
+> Two things in this section turned out wrong, and the table is left standing
+> rather than rewritten, because a plan quietly edited to match what happened is
+> not a record of anything.
+>
+> **1. The week order below contradicts §F4 on the same page.** F2 puts
+> mechanisms in week 1 and the ledger in week 2; §F4 — "the trap to avoid" —
+> says start with the ledger and accountant, and retro action A1 says the same.
+> §F4 was right and is what was built. The ledger, accountant, concurrency test
+> and property tests all landed with no OpenDP import anywhere in the tree.
+>
+> **2. Sprint 2 was one week, not four.** Roughly 75% of the scope below was
+> cut, explicitly and up front, rather than attempted and abandoned. Quantile
+> mechanisms shipped; count, mean and standard deviation did not. Accuracy
+> intervals (`S2-5`) moved to Sprint 3, and the 10,000-trial calibration became
+> `S3-8`. What was cut and why is recorded in DESIGN.md §8.
+>
+> What survived contact unchanged: the ledger-first ordering, the concurrency
+> test as the flagship, the one-transaction invariant, and the instruction to
+> delete the per-contributor leak.
+
 **Week 1 — mechanisms**
 `privacy/mechanisms/` with the Strategy + Registry pattern: one class per
 statistic type, selected from `MetricDefinition.statistics`. Wrap OpenDP's
@@ -284,13 +306,27 @@ free, because `summarize()` costs no budget. Record the Sprint 2 demo.
 
 ## F3. Sprint 2 definition of done
 
-- [ ] No exact value is reachable anywhere in the UI
-- [ ] Every release has a ledger entry; every ledger entry has a release
-- [ ] Concurrency and property-based tests green **on Postgres**
-- [ ] Calibration tests confirm each mechanism's noise matches theory
-- [ ] Budget exhaustion refuses cleanly and is demonstrated on camera
-- [ ] Accuracy intervals displayed next to every published statistic
-- [ ] DESIGN.md §4 updated with the new test categories
+> **Outcome, marked at the end of the sprint.** Six of seven met; the seventh
+> was cut with the accuracy-interval work it depends on.
+
+- [x] No exact value is reachable anywhere in the UI — and a second leak was
+      found doing it: the chart plotted Minimum and Maximum, which are
+      individual contributors' values under a friendlier label
+- [x] Every release has a ledger entry; every ledger entry has a release —
+      asserted in both directions, and `LedgerEntry.release` is NOT NULL
+- [x] Concurrency and property-based tests green **on Postgres** — plus a guard
+      that fails the build if they skip instead of running
+- [~] Calibration tests confirm each mechanism's noise matches theory —
+      **partial.** Directional only: repeated releases disagree, and spread
+      widens as epsilon falls. Verified by planting a mechanism that returns the
+      true value. Distribution-matching is `S3-8`
+- [x] Budget exhaustion refuses cleanly — demonstrated live in
+      `release_period`, which refused the sixth cell of six
+- [ ] Accuracy intervals displayed next to every published statistic — **cut.**
+      `summarize()` returns none for the exponential mechanism (ADR-0003
+      finding 4), so this needs simulation. `S2-5`, Sprint 3. The page says why
+      the column is empty rather than leaving it blank
+- [x] DESIGN.md §4 updated with the new test categories
 
 ## F4. The trap to avoid
 
