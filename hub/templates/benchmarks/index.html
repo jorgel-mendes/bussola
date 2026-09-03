@@ -31,6 +31,10 @@
     .banner strong { display: block; font-size: 1.05rem; letter-spacing: .02em; }
     .banner p { margin: .4rem 0 0; font-size: .9rem; }
 
+    .empty { padding: 1.25rem 1.4rem; background: var(--card);
+             border: 1px solid var(--line); border-radius: 6px; margin-bottom: 1.5rem; }
+    .empty p { margin: 0 0 .5rem; }
+    .empty p:last-child { margin-bottom: 0; color: var(--muted); font-size: .92rem; }
     form { display: flex; flex-wrap: wrap; gap: .75rem; align-items: flex-end;
            padding: 1rem; background: var(--card); border: 1px solid var(--line);
            border-radius: 6px; margin-bottom: 1.5rem; }
@@ -90,6 +94,20 @@
     <p class="sub">Bússola — privacy-preserving benchmarking</p>
   {% endif %}
 
+  {% if not collaborations %}
+    {# Empty state. A deployed hub with no data must say so: four empty dropdowns
+       and a View button read as a broken page, not an unseeded one. #}
+    <div class="empty">
+      <p><strong>No collaborations yet.</strong></p>
+      <p>
+        This hub is deployed and healthy, but nothing has been configured on it.
+        An analyst creates a collaboration, its cohorts and its metric catalog in
+        the <a href="{% url 'admin:index' %}">admin</a>; contributors then submit through the
+        Bússola agent, and benchmarks appear here once a cohort reaches its
+        minimum contributor threshold.
+      </p>
+    </div>
+  {% else %}
   <form method="get">
     <div>
       <label for="collaboration">Collaboration</label>
@@ -125,6 +143,7 @@
     </div>
     <button type="submit">View</button>
   </form>
+  {% endif %}
 
   {% if result %}
     {% if result.suppressed %}

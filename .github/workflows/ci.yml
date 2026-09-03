@@ -32,6 +32,13 @@ jobs:
 
     env:
       DATABASE_URL: postgres://bussola:bussola@localhost:5432/bussola_test
+      # Turns a silent skip into a build failure. The concurrency tests skip on
+      # SQLite by design (select_for_update() is a no-op there, so they would
+      # pass while proving nothing). In CI that skip must never happen quietly:
+      # a mistyped DATABASE_URL or a Postgres service that failed to start would
+      # otherwise reduce the project's most important test to four skips and a
+      # green tick. hub/test_postgres_guard.py fails the build instead.
+      BUSSOLA_REQUIRE_POSTGRES: "1"
 
     steps:
       - uses: actions/checkout@v4

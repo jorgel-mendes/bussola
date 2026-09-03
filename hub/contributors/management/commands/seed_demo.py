@@ -122,6 +122,16 @@ class Command(BaseCommand):
             default=None,
             help="Write issued raw tokens to this JSON file (used by docker-compose).",
         )
+        parser.add_argument(
+            "--no-token-output",
+            action="store_true",
+            help=(
+                "Issue tokens but never emit them. For unattended runs at container "
+                "boot, where stdout is a retained deploy log: raw API keys in a log "
+                "defeat the point of storing only their hashes. Tokens are re-issued "
+                "through the admin when a contributor is actually onboarded."
+            ),
+        )
 
     @transaction.atomic
     def handle(self, *args, **options) -> None:
@@ -177,7 +187,12 @@ class Command(BaseCommand):
         self.stdout.write(f"Contributors: {options['contributors']} (each with a fresh token)")
 
         out: Path | None = options["tokens_out"]
-        if out:
+        if options["no_token_output"]:
+            self.stdout.write(
+                "Raw tokens NOT emitted (--no-token-output). Issue one per "
+                "contributor from the admin when onboarding."
+            )
+        elif out:
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(json.dumps(tokens, indent=2), encoding="utf-8")
             self.stdout.write(self.style.WARNING(f"Raw tokens written to {out} — gitignored."))

@@ -31,4 +31,10 @@ RUN SECRET_KEY=build-only ALLOWED_HOSTS=localhost \
 EXPOSE 8000
 
 # Render sets $PORT; default to 8000 elsewhere.
-CMD ["sh", "-c", "python hub/manage.py migrate --noinput && gunicorn config.wsgi:application --chdir hub --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 60"]
+# Render's free tier has no shell, so first-run setup has to happen at boot.
+# bootstrap_deploy is idempotent and env-guarded: it is a no-op unless
+# DJANGO_SUPERUSER_* / BUSSOLA_SEED_DEMO are set, and it RAISES rather than
+# warning if it was asked to do something and could not. Kept as a management
+# command rather than a longer && chain, because Sprint 1's third defect was a
+# shell command that grew inside a config file until it silently split.
+CMD ["sh", "-c", "python hub/manage.py migrate --noinput && python hub/manage.py bootstrap_deploy && gunicorn config.wsgi:application --chdir hub --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 60"]
