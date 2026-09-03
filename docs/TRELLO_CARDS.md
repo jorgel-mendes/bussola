@@ -20,15 +20,16 @@ Product Backlog    Sprint Backlog    In Progress    Blocked    Done
 
 ### Labels
 
-| Label | Colour | Use |
-|---|---|---|
-| `sprint-1` | green | |
-| `sprint-2` | yellow | |
-| `sprint-3` | blue | |
-| `privacy-critical` | red | Cards where a defect voids the guarantee |
-| `deliverable` | purple | Graded artifacts (docs, recordings, deployment) |
+Verified against `api.trello.com/1/boards/ZMEqk4Up/labels` rather than
+remembered — the planned table and the live board had drifted.
 
----
+| Label | Colour | Status |
+|---|---|---|
+| `sprint-1` | green | Created end of Sprint 2. Green was the planned slot and was still free |
+| `sprint-2` | **yellow_dark** | Live. Note: a blank plain-`yellow` label also exists — do not use it for anything, or the filter menu shows two near-identical yellows |
+| `sprint-3` | blue | Live |
+| `privacy-critical` | red | Live. A defect here voids the guarantee rather than producing a wrong number |
+| `deliverable` | purple | **Planned but never created.** Purple is free if wanted |
 
 ## 2. Two paste tricks
 
@@ -44,43 +45,70 @@ Trello splits them into one item per line, exactly like cards.
 
 ## 3. Current board state
 
-### Done (11) — Sprint 1 delivery
+**44 cards**, read from the API at end of Sprint 2. Lists: Product Backlog ·
+Sprint Backlog · In Progress · Blocked · Done.
+
+### Done (34)
+
+All of Sprint 1 (`S1-1` … `S1-17`), plus Sprint 2's delivered work:
 
 ```
-S1-1  Define a metric with bounds and a required rationale
-S1-2  Register a contributor and issue an API token
-S1-3  Run bussola-agent submit from a contributor machine
-S1-4  Reject duplicate submissions (one value per contributor/period/metric)
-S1-5  Open and close a reporting period
-S1-6  Show an exact cohort benchmark behind an UNSAFE banner
-S1-7  Get CI running on every push
-S1-8  Generate synthetic multi-contributor data with ground truth
-S1-9  Prove multi-party shape with docker-compose agents
-S1-10 Write the design and testing document
-S1-11 Write ADRs 0001-0003
+S2-1  Protect published benchmarks with differential privacy
+S2-2  Set a reporting period's epsilon budget
+S2-3  Refuse releases that would exceed the budget
+S2-4  Record every epsilon spend in an append-only ledger
+S2-6  Suppress cells with fewer than five contributors
+S2-7  Split budget across the statistics in a release
+S2-8  Show the bounds rationale next to each benchmark
+S2-9  Write the concurrency test for budget double-spend
+S2-10 Write property-based tests for the budget invariant
+S2-12 Remove the per-contributor value list from the dashboard
+S2-13 Run the concurrency tests locally on Postgres and fail the build if they skip
+S2-14 Select DP mechanisms from the catalog via a registry
+S2-16 Write the release and its ledger entries in one transaction
+S2-17 Assert the release/ledger invariant in both directions
+S2-18 Resize the demo consortium to 50/50/6
+S2-20 Bootstrap a deployed hub that has no shell access
+S3-7  Deploy to Render and add the URL to README
 ```
 
-### Move to Done now (work already complete)
+`S3-7` was Sprint 1's only slipped goal and was closed on day 1 of Sprint 2,
+per retro action A5.
 
-| Card | Evidence |
-|---|---|
-| **S1-12** Create and publish the Trello board | Board live and verified public |
-| **S1-14** Fix the CI badge URL in README | Real account wired in; badge renders |
-| **S1-15** Verify the Docker builds | Both images build; compose demo runs; found 3 defects |
-
-### Sprint Backlog — actually remaining (3)
+### Product Backlog (10)
 
 ```
-S1-13 Push repo to GitHub and share with quantic-grader
-S1-16 Spike OpenDP in a standalone notebook
-S1-17 Record the Sprint 1 demo
+S2-5  Show an accuracy estimate before releasing          <- cut from Sprint 2
+S2-11 Write statistical calibration tests for each mechanism  <- partially done
+S3-1  Show a contributor its position against the cohort distribution
+S3-2  Show confidence intervals on every published value
+S3-3  Put the privacy-utility curve in the dashboard
+S3-4  Export the epsilon ledger as CSV
+S3-5  Add a dry-run mode note to the operator guide
+S3-6  Compare a plant's trend across periods
+S3-8  Record the final 15-20 minute demo
+S3-9  Deepen the mechanism calibration tests toward 10,000 trials
 ```
 
-### Product Backlog (20)
+`S2-5` and `S2-11` returned to the backlog rather than being quietly dropped.
+Both carry a comment saying why — a card that silently reappears in the backlog
+reads as forgotten rather than decided.
 
-Sprint 2 and Sprint 3 cards, unchanged. Two of them (S2-12, S3-1) still use retired vocabulary — see §5.
+**Numbering note:** the calibration card is `S3-9`, not `S3-8`. `S3-8` was
+already taken by the final demo recording. This document briefly said `S3-8`
+and was wrong; the board was right.
 
----
+### Known board defects
+
+Two card titles still use **retired vocabulary** (GLOSSARY.md), which the code
+forbids and `hub/test_naming_drift.py` enforces:
+
+| Card | Says | Should say |
+|---|---|---|
+| `S1-3` | "from a **plant** machine" | "from a **contributor** machine" |
+| `S3-6` | "Compare a **plant's** trend" | "Compare a **contributor's** trend" |
+
+The board is a graded artifact, so this is worth the two minutes.
 
 ## 4. Checklists to add
 
@@ -192,7 +220,7 @@ Added during Sprint 2 day 3. Recorded here rather than done, because the sprint
 is one week and this is the part that can be strengthened later without
 invalidating anything built on it.
 
-### S3-8 — Deepen the mechanism calibration tests · `sprint-3`
+### S3-9 — Deepen the mechanism calibration tests · `sprint-3`
 
 `hub/privacy/test_mechanisms.py` currently proves the *direction* of the
 privacy--utility relationship: repeated releases of identical data disagree,

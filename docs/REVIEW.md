@@ -259,7 +259,7 @@ budget again and produces a different number.
 > cut, explicitly and up front, rather than attempted and abandoned. Quantile
 > mechanisms shipped; count, mean and standard deviation did not. Accuracy
 > intervals (`S2-5`) moved to Sprint 3, and the 10,000-trial calibration became
-> `S3-8`. What was cut and why is recorded in DESIGN.md §8.
+> `S3-9`. What was cut and why is recorded in DESIGN.md §8.
 >
 > What survived contact unchanged: the ledger-first ordering, the concurrency
 > test as the flagship, the one-transaction invariant, and the instruction to
@@ -319,7 +319,7 @@ free, because `summarize()` costs no budget. Record the Sprint 2 demo.
 - [~] Calibration tests confirm each mechanism's noise matches theory —
       **partial.** Directional only: repeated releases disagree, and spread
       widens as epsilon falls. Verified by planting a mechanism that returns the
-      true value. Distribution-matching is `S3-8`
+      true value. Distribution-matching is `S3-9`
 - [x] Budget exhaustion refuses cleanly — demonstrated live in
       `release_period`, which refused the sixth cell of six
 - [ ] Accuracy intervals displayed next to every published statistic — **cut.**

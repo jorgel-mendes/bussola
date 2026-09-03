@@ -374,7 +374,7 @@ story most needs to demonstrate and the harder half to fake. See §4.5.
 tests run OpenDP roughly 155 times at ~450 ms per release. Context reuse was
 measured and gives no speedup (1.0×) — the cost is in the release itself, not
 in building the compositor. Deepening these toward SPEC §7.5's 10,000 trials is
-recorded as `S3-8`, and needs its own CI job rather than a tighter loop.
+recorded as `S3-9`, and needs its own CI job rather than a tighter loop.
 
 ### 4.5 What the tests found that design review did not
 
@@ -405,7 +405,7 @@ broken number with an invisibly meaningless one.
 
 | Category | Purpose |
 |---|---|
-| **Statistical calibration at depth** (`S3-8`) | Assert the empirical distribution matches the exponential mechanism's theory, not merely that spread responds to epsilon. Needs its own CI job |
+| **Statistical calibration at depth** (`S3-9`) | Assert the empirical distribution matches the exponential mechanism's theory, not merely that spread responds to epsilon. Needs its own CI job |
 | **Privacy–utility sweep** | SPEC §8, over ε × N × statistic, emitting a CSV that serves both the design document and the results charts |
 | **Accuracy intervals** (`S2-5`) | Derived by simulation, since `summarize()` returns none for the exponential mechanism |
 | **Regression** | Golden-file outputs under a fixed seed — in tests only, never in production releases |
@@ -525,7 +525,7 @@ disclosure in place.
 |---|---|
 | Count, mean and stddev mechanisms | Far worse value per unit of epsilon (SPEC §6.1). At ε=1 split three ways a DP mean's interval came back wider than the sum being estimated. Shipping only the statistic that works is a position, not a gap |
 | Accuracy intervals (`S2-5`) | `summarize()` returns none for the exponential mechanism (ADR-0003 finding 4). Needs simulation; deferred to Sprint 3 |
-| 10,000-trial calibration (`S3-8`) | ~450 ms per release, and context reuse measured at 1.0× speedup. Needs its own CI job, not a tighter loop |
+| 10,000-trial calibration (`S3-9`) | ~450 ms per release, and context reuse measured at 1.0× speedup. Needs its own CI job, not a tighter loop |
 | zCDP accountant | Basic composition can be checked with a calculator and explained on camera. `BudgetPeriod.accountant` carries the choice and refuses loudly rather than mis-accounting |
 
 **Also delivered, unplanned:** `bootstrap_deploy` (Render's free tier has no
@@ -538,14 +538,14 @@ retained deploy log; and `create_superuser()` bypasses
 `AUTH_PASSWORD_VALIDATORS`, so a deploy could stand up an internet-reachable
 admin with `admin`/`admin` and report success.
 
-**Carried to Sprint 3:** `S2-5` (accuracy intervals), `S3-8` (calibration
+**Carried to Sprint 3:** `S2-5` (accuracy intervals), `S3-9` (calibration
 depth), `S1-13` (invite `quantic-grader`).
 
 ### Sprint 3 — product surface and evidence (planned)
 
 Contributor self-service position view · accuracy intervals on every published
 value (`S2-5`) · privacy–utility sweep from SPEC §8 · ledger CSV export for the
-Auditor · calibration depth (`S3-8`) · final demo recording.
+Auditor · calibration depth (`S3-9`) · final demo recording.
 
 One week, so the same discipline applies: the graded deliverables — final
 design document, business-first README and presentation, and the 15–20 minute
