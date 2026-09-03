@@ -103,6 +103,54 @@ class BenchmarkRelease(ImmutableModel):
     def __str__(self) -> str:
         return f"{self.cohort.code}·{self.metric.code}·{self.period.label}"
 
+    @property
+    def quantiles_are_ordered(self) -> bool | None:
+        """Whether q25 <= median <= q75 in the RELEASED values.
+
+        True quantiles are ordered by definition. Released ones need not be:
+        each is drawn independently by the exponential mechanism, so at small N
+        or tight epsilon the noise can exceed the spacing between them and the
+        third quartile can land below the first.
+
+        That is not a bug to correct. It is the most direct evidence a release
+        carries about its own usefulness, and it is measurable without touching
+        the data. Seen in the seeded demo at N=6: q25=131.8, q75=126.1.
+
+        Deliberately NOT fixed by sorting. Sorting would be privacy-safe --
+        differential privacy is closed under post-processing -- but it would
+        conceal the one signal telling a member not to trust this release, and
+        replace a visibly broken number with an invisibly meaningless one.
+
+        Returns None when the release has no quantiles to compare.
+        """
+        values = {
+            s.statistic: s.value
+            for s in self.statistics.all()
+            if s.statistic in {"q25", "median", "q75"}
+        }
+        if len(values) < 2:
+            return None
+        ordered = [values[k] for k in ("q25", "median", "q75") if k in values]
+        return all(a <= b for a, b in zip(ordered, ordered[1:], strict=False))
+
+
+#: Reading order for a distribution. Alphabetical ordering puts "median"
+#: before "q25", which is nonsense to read: a distribution is understood
+#: left-to-right, not lexically.
+STATISTIC_DISPLAY_ORDER = ["count", "q25", "median", "q75", "mean", "stddev"]
+
+
+def display_sorted(statistics):
+    """Order released statistics for reading, not for the database."""
+    return sorted(
+        statistics,
+        key=lambda s: (
+            STATISTIC_DISPLAY_ORDER.index(s.statistic)
+            if s.statistic in STATISTIC_DISPLAY_ORDER
+            else len(STATISTIC_DISPLAY_ORDER)
+        ),
+    )
+
 
 class ReleasedStatistic(ImmutableModel):
     """One noisy statistic within a release."""

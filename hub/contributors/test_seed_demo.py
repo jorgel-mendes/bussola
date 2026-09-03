@@ -23,11 +23,49 @@ pytestmark = pytest.mark.django_db
 def test_seeds_a_working_consortium():
     call_command("seed_demo", contributors=6, periods=3, verbosity=0)
 
-    assert Cohort.objects.count() == 2
+    # Three cohorts, not two. Changed deliberately in Sprint 2: the OpenDP spike
+    # measured that a DP quantile needs roughly 50 contributors at epsilon=1 to
+    # beat the sector IQR, so the demo now carries two cohorts large enough for
+    # the benchmark to mean something and one small enough to show what happens
+    # when it cannot. See test_cohorts_are_split_unevenly_on_purpose below.
+    assert Cohort.objects.count() == 3
     assert Contributor.objects.count() == 6
     assert MetricDefinition.objects.count() == 2
     assert ReportingPeriod.objects.count() == 3
     assert ApiToken.objects.active().count() == 6
+
+
+def test_cohorts_are_split_unevenly_on_purpose():
+    """The demo must contain a cohort too small to benchmark.
+
+    An even split cannot express "this cell cannot support a release", which is
+    the case the privacy story most needs to demonstrate -- and the harder half
+    to fake. At the demo size the small cohort produced q75 BELOW q25, which is
+    the noise exceeding the signal, visibly.
+    """
+    call_command("seed_demo", contributors=106, periods=1, verbosity=0)
+
+    sizes = sorted(c.contributors.count() for c in Cohort.objects.all())
+
+    assert sizes == [6, 50, 50], f"expected a 50/50/6 split, got {sizes}"
+
+
+def test_the_seeded_split_matches_datagen():
+    """seed_demo and datagen must agree about who is in which cohort.
+
+    They are separate programs with separate copies of the weights. If they
+    drift, the seeded roster and the generated CSVs describe different
+    consortia, and every benchmark is computed over the wrong cohort.
+    """
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "datagen"))
+    from generate import COHORT_WEIGHTS as DATAGEN_WEIGHTS
+
+    from contributors.management.commands.seed_demo import COHORT_WEIGHTS as SEED_WEIGHTS
+
+    assert SEED_WEIGHTS == DATAGEN_WEIGHTS
 
 
 def test_is_idempotent():
