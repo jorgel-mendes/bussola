@@ -261,3 +261,97 @@ def test_a_cross_collaboration_cell_is_refused_with_the_documented_exception(
 
     assert BenchmarkRelease.objects.count() == 0
     assert LedgerEntry.objects.count() == 0
+
+
+# --- a release reporting on its own usefulness ----------------------------
+
+
+def _release_with(cohort, metric, period, values: dict[str, str]):
+    """A release carrying exactly these statistic values.
+
+    Constructed rather than produced by a real release, deliberately. The
+    property under test is a function of the STORED values, and driving it
+    through the mechanism would make the test depend on where the noise landed
+    -- which is precisely the thing that varies. An earlier version did exactly
+    that and was flaky: at N=8 even epsilon=3 inverts the quartiles often
+    enough to fail.
+    """
+    release = BenchmarkRelease.objects.create(
+        period=period,
+        cohort=cohort,
+        metric=metric,
+        n_contributors=8,
+        epsilon_spent=Decimal("1.000000"),
+    )
+    for statistic, value in values.items():
+        ReleasedStatistic.objects.create(
+            release=release,
+            statistic=statistic,
+            mechanism="exponential",
+            value=Decimal(value),
+            epsilon_spent=Decimal("0.333334"),
+        )
+    return release
+
+
+def test_ordered_quantiles_are_recognised(cohort, metric, period):
+    release = _release_with(
+        cohort, metric, period, {"q25": "3000", "median": "3400", "q75": "3800"}
+    )
+
+    assert release.quantiles_are_ordered is True
+
+
+def test_unordered_quantiles_are_detected(cohort, metric, period):
+    """PRODUCT-CRITICAL, and observed for real.
+
+    Each quantile is drawn independently by the exponential mechanism, so at
+    small N or tight epsilon the noise can exceed the spacing between them and
+    q75 can land below q25. Seen in the seeded demo at N=6: q25=131.8,
+    q75=126.1 -- these are those numbers.
+
+    Detecting it needs no access to the data. It is a property of the released
+    values alone, and it is the most direct evidence a release carries about
+    whether it can be relied on.
+    """
+    release = _release_with(
+        cohort, metric, period, {"q25": "131.8", "median": "171.9", "q75": "126.1"}
+    )
+
+    assert release.quantiles_are_ordered is False
+
+
+def test_a_release_with_too_few_quantiles_to_compare_reports_none(
+    cohort, metric, period
+):
+    """Not ordered, not unordered -- unknowable. Returning False would flag a
+    perfectly good single-statistic release as broken."""
+    release = _release_with(cohort, metric, period, {"median": "3400"})
+
+    assert release.quantiles_are_ordered is None
+
+
+def test_unordered_quantiles_are_not_silently_reordered(budget, cell):
+    """Sorting would be privacy-safe -- DP is closed under post-processing --
+    but it would replace a visibly broken number with an invisibly meaningless
+    one. The released values are stored exactly as the mechanism produced them.
+    """
+    outcome = do_release(cell, "1.500000")
+
+    # Compare insertion order and 6-dp values. The in-memory objects keep the
+    # mechanism's full precision while the column stores six places, so an
+    # exact object-to-object comparison would fail on rounding rather than on
+    # the reordering this test is about.
+    stored = [
+        (s.statistic, s.value.quantize(Decimal("0.000001")))
+        for s in outcome.release.statistics.all().order_by("id")
+    ]
+    produced = [
+        (s.statistic, s.value.quantize(Decimal("0.000001")))
+        for s in outcome.statistics
+    ]
+
+    assert stored == produced
+    assert [name for name, _ in stored] == ["q25", "median", "q75"], (
+        "statistics were reordered on the way to the database"
+    )

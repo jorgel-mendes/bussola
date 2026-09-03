@@ -116,6 +116,28 @@ are not publishable.
 This is the project's central trade-off arriving early, with numbers, which is
 exactly what the spike was for.
 
+### Confirmed in Sprint 2 implementation
+
+Finding 4 was pinned as an executable test rather than left as prose:
+`test_summarize_reports_a_scale_but_no_accuracy_for_quantiles` asserts that
+`summarize()` returns a positive scale and a null accuracy. If a future OpenDP
+version starts returning an interval for the exponential mechanism, that test
+fails — which is the notification we want, because the Sprint 3 simulation work
+(`S2-5`) would become unnecessary.
+
+Finding 5 was reproduced in the real release path rather than only in the
+spike. At N = 6 the released quartiles came out **out of order** — q25 = 131.8,
+q75 = 126.1 — because each quantile is drawn independently and at small N the
+noise exceeds the spacing between them. Both 50-contributor cohorts were clean.
+The utility floor is therefore not merely a table in this document: it is
+detectable in a single release, without reference to the data, and the product
+now says so (see DESIGN.md §4.5).
+
+One thing this measurement did **not** support: `summarize()` returns a usable
+accuracy figure for the Laplace-backed statistics (count, sum, mean) — only the
+exponential mechanism returns null. That narrows `S2-5` to quantiles rather than
+to every statistic, which was not clear from the original spike.
+
 ### Candidate grid width barely matters
 
 At N = 50, ε = 2: full bounds (1760–7100) → 19 MJ/t; BAT-centred (2500–5000) →

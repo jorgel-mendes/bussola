@@ -107,14 +107,26 @@ METRICS = [
     },
 ]
 
-COHORTS = [("2320", "Cement and lime"), ("2011", "Basic industrial chemicals")]
+COHORTS = [
+    ("2320", "Cement and lime"),
+    ("2011", "Basic industrial chemicals"),
+    ("2farm", "Independent lime kilns"),
+]
+
+# Mirrors datagen.generate.COHORT_WEIGHTS. Deliberately uneven: the OpenDP spike
+# measured that a DP quantile at epsilon=1 needs roughly 50 contributors to beat
+# the sector IQR, and the original even split of 12 gave 6 per cell. The demo now
+# carries two cohorts large enough for the benchmark to mean something and one
+# small enough to show what the system does when it cannot help -- which is the
+# more honest half of the story. See docs/adr/0003.
+COHORT_WEIGHTS = {"2320": 50, "2011": 50, "2farm": 6}
 
 
 class Command(BaseCommand):
     help = "Seed a demo collaboration with cohorts, contributors, metrics, periods and tokens."
 
     def add_arguments(self, parser) -> None:
-        parser.add_argument("--contributors", type=int, default=12)
+        parser.add_argument("--contributors", type=int, default=106)
         parser.add_argument("--periods", type=int, default=24)
         parser.add_argument(
             "--tokens-out",
@@ -170,10 +182,12 @@ class Command(BaseCommand):
             )
         self.stdout.write(f"Periods: {len(labels)} ({labels[0]} … {labels[-1]})")
 
+        assignments = self._cohort_assignments(options["contributors"])
+
         tokens: dict[str, str] = {}
         for i in range(options["contributors"]):
             slug = f"plant-{i + 1:02d}"
-            cohort = cohorts[COHORTS[i % len(COHORTS)][0]]
+            cohort = cohorts[assignments[i]]
             contributor, _ = Contributor.objects.update_or_create(
                 collaboration=collaboration,
                 name=f"Plant {i + 1:02d}",
@@ -203,6 +217,24 @@ class Command(BaseCommand):
                 self.stdout.write(f"  {slug}: {raw}")
 
         self.stdout.write(self.style.SUCCESS("\nSeed complete."))
+
+    @staticmethod
+    def _cohort_assignments(n: int) -> list[str]:
+        """Assign n contributors to cohorts by COHORT_WEIGHTS.
+
+        Must agree with datagen.generate.build_plants, or the seeded roster and
+        the generated data would disagree about who is in which cohort.
+        """
+        total = sum(COHORT_WEIGHTS.values())
+        out: list[str] = []
+        for code, weight in COHORT_WEIGHTS.items():
+            out.extend([code] * max(1, round(n * weight / total)))
+        largest = max(COHORT_WEIGHTS, key=COHORT_WEIGHTS.get)
+        while len(out) > n:
+            out.remove(largest)
+        while len(out) < n:
+            out.append(largest)
+        return out
 
     @staticmethod
     def _period_labels(count: int, start_year: int = 2025, start_month: int = 1) -> list[str]:

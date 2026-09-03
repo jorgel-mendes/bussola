@@ -76,13 +76,48 @@ METRICS = [
     ),
 ]
 
-SECTORS = [("2320", "Cement and lime"), ("2011", "Basic industrial chemicals")]
+SECTORS = [
+    ("2320", "Cement and lime"),
+    ("2011", "Basic industrial chemicals"),
+    ("2farm", "Independent lime kilns"),
+]
+
+#: Relative cohort sizes, and the reason the demo is not split evenly.
+#:
+#: The OpenDP spike measured the privacy-utility floor (ADR-0003): at epsilon=1
+#: the median absolute error is ~49 MJ/t with 50 contributors and ~792 with 12,
+#: against a true sector IQR of roughly 700. A 12-contributor consortium split
+#: two ways gave 6 per cell, where a DP quantile is worse than useless.
+#:
+#: So the demo carries BOTH cases deliberately. Two cohorts large enough for the
+#: benchmark to mean something, and one small enough to show what the system
+#: does when it cannot help -- which is the more honest half of the story, and
+#: the harder half to fake. A demo that only ever shows the happy path invites
+#: the question "what happens when N is small?" and has no answer.
+COHORT_WEIGHTS = {"2320": 50, "2011": 50, "2farm": 6}
 
 
 def build_plants(n: int, rng: random.Random) -> list[PlantProfile]:
+    """Assign contributors to cohorts by COHORT_WEIGHTS, scaled to n.
+
+    Not round-robin. An even split cannot express "one cohort is too small to
+    publish", which is the case the privacy story most needs to demonstrate.
+    """
+    total_weight = sum(COHORT_WEIGHTS.values())
+    assignments: list[str] = []
+    for code, weight in COHORT_WEIGHTS.items():
+        count = max(1, round(n * weight / total_weight))
+        assignments.extend([code] * count)
+    # Rounding can overshoot or undershoot; trim or pad from the largest cohort.
+    largest = max(COHORT_WEIGHTS, key=COHORT_WEIGHTS.get)
+    while len(assignments) > n:
+        assignments.remove(largest)
+    while len(assignments) < n:
+        assignments.append(largest)
+
     plants: list[PlantProfile] = []
     for i in range(n):
-        sector_code, _ = SECTORS[i % len(SECTORS)]
+        sector_code = assignments[i]
         # Lognormal: a few inefficient plants sit far above the median, which is
         # what makes quartiles more informative than the mean for benchmarking.
         base = METRICS[0].sector_mean * math.exp(rng.gauss(0, METRICS[0].sector_sigma))
