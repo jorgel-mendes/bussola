@@ -52,8 +52,8 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies
-        # Not --all-extras: the `dp` extra (OpenDP) is unused until Sprint 2, so
-        # installing it here only adds build time and a failure surface.
+        # OpenDP is a core dependency from Sprint 2 -- the release path imports
+        # it -- so a plain `uv sync --dev` now installs it.
         run: uv sync --dev
 
       - name: Lint

@@ -9,15 +9,20 @@ dependencies = [
     "django-environ>=0.11",
     "psycopg[binary]>=3.2",
     "polars>=1.36,<1.37",  # pinned: OpenDP 0.15.1 embeds Polars 1.36.1 DSL schema
+    "opendp>=0.15,<0.16",  # core from Sprint 2: the hub cannot release without it
+    "pyarrow>=17",         # required by OpenDP summarize(); OpenDP does not declare it
     "gunicorn>=23.0",
     "whitenoise>=6.7",
     "bussola-contracts",
 ]
 
 [project.optional-dependencies]
-# OpenDP lands in Sprint 2. Kept out of the base install so Sprint 1's build
-# stays fast and green; run `uv sync --extra dp` for the week-4 spike.
-dp = ["opendp>=0.15,<0.16", "pyarrow>=17"]  # pyarrow: required by OpenDP summarize()
+# Retained so `uv sync --extra dp` keeps working for anyone following the
+# Sprint 1 spike instructions. From Sprint 2 these are core dependencies: the
+# hub's whole job is releasing differentially private statistics, and the
+# Docker image builds with `--no-dev` and no extras, so an optional OpenDP
+# would deploy a hub that cannot release.
+dp = ["opendp>=0.15,<0.16", "pyarrow>=17"]
 
 [dependency-groups]
 dev = [

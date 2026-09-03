@@ -89,8 +89,10 @@ dependencies = [
     { name = "django-environ" },
     { name = "djangorestframework" },
     { name = "gunicorn" },
+    { name = "opendp" },
     { name = "polars" },
     { name = "psycopg", extra = ["binary"] },
+    { name = "pyarrow" },
     { name = "whitenoise" },
 ]
 
@@ -118,9 +120,11 @@ requires-dist = [
     { name = "django-environ", specifier = ">=0.11" },
     { name = "djangorestframework", specifier = ">=3.15" },
     { name = "gunicorn", specifier = ">=23.0" },
+    { name = "opendp", specifier = ">=0.15,<0.16" },
     { name = "opendp", marker = "extra == 'dp'", specifier = ">=0.15,<0.16" },
     { name = "polars", specifier = ">=1.36,<1.37" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "pyarrow", specifier = ">=17" },
     { name = "pyarrow", marker = "extra == 'dp'", specifier = ">=17" },
     { name = "whitenoise", specifier = ">=6.7" },
 ]
