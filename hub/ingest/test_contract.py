@@ -112,3 +112,55 @@ def test_contract_version_is_pinned():
         metric_code="m", period_label="p", value=Decimal("1"),
         n_records=1, agent_version="0.1.0",
     ).contract_version == "1.0"
+
+
+# --- the position report (S3-1) --------------------------------------------
+#
+# The position endpoint hand-builds its response dict rather than going through
+# a DRF serializer, so there is no serializer for a structural test to compare
+# against. The live response is compared to the pydantic model instead, which is
+# a stronger check: it validates the actual bytes an agent will parse.
+
+
+def test_position_response_validates_against_the_agent_contract(
+    auth_api, metric, period, cohort, contributor
+):
+    """The hub's response must be parseable by `PositionReport`, exactly.
+
+    `model_validate` on a frozen model with no extra fields allowed would pass a
+    response missing an optional field, so the field sets are compared too. The
+    plant/contributor rename broke this boundary once already.
+    """
+    from decimal import Decimal
+
+    from benchmarks.models import BenchmarkRelease, ReleasedStatistic
+    from bussola_contracts import PositionReport
+    from ingest.models import Submission
+
+    Submission.objects.create(
+        contributor=contributor, period=period, metric=metric,
+        value=Decimal("3100.000000"), n_records=30, agent_version="test",
+    )
+    release = BenchmarkRelease.objects.create(
+        period=period, cohort=cohort, metric=metric, n_contributors=8,
+        epsilon_spent=Decimal("1.000000"),
+    )
+    for statistic, value in (("q25", "3000"), ("median", "3400"), ("q75", "3800")):
+        ReleasedStatistic.objects.create(
+            release=release, statistic=statistic, mechanism="exponential",
+            value=Decimal(value), epsilon_spent=Decimal("0.333334"),
+        )
+
+    body = auth_api.get(
+        f"{reverse('ingest:contributor-position')}?metric={metric.code}&period={period.label}"
+    ).json()
+
+    report = PositionReport.model_validate(body)
+
+    assert report.quartile == "Q2"
+    assert report.contract_version == CONTRACT_VERSION
+    assert set(body) == set(PositionReport.model_fields), (
+        "Hub response and PositionReport have drifted apart: "
+        f"hub-only={sorted(set(body) - set(PositionReport.model_fields))}, "
+        f"contract-only={sorted(set(PositionReport.model_fields) - set(body))}"
+    )

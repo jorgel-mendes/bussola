@@ -10,4 +10,5 @@ urlpatterns = [
     path("healthz/", views.healthz, name="healthz"),
     path("metrics/", views.MetricListView.as_view(), name="metric-list"),
     path("submissions/", views.create_submission, name="submission-create"),
+    path("position/", views.contributor_position, name="contributor-position"),
 ]

@@ -185,6 +185,53 @@ REFUSED, what it needed, and what is actually left after the rollback. Each cell
 is its own transaction: a cell that cannot be paid for never undoes cells already
 published, because those are real disclosures the ledger has to keep.
 
+### Ask where you sit
+
+The question a member actually joined to have answered, asked from the plant's
+own machine with the plant's own credential:
+
+```bash
+uv run bussola-agent position --metric specific_thermal_energy --period 2026-07
+```
+
+```
+your value  : 3100.000000 MJ/t clinker
+benchmark   : q25=3000.000000  median=3400.000000  q75=3800.000000
+              from 47 contributors, ε=1.000000
+
+You are in Q2.
+```
+
+It **spends no privacy budget**. The hub reads an already-published release and
+places the contributor's own value against it — post-processing, and
+differential privacy is closed under post-processing — which is what makes it
+safe to run on a schedule. The endpoint computes nothing, and a test asserts
+that ten reads write no ledger entry and create no release.
+
+When the released quartiles come back out of order, the position is **refused
+rather than guessed**:
+
+```
+Your position cannot be reported.
+
+This release is too noisy to place you against. The published quartiles came
+back out of order, which happens when a cohort is small enough that the privacy
+noise exceeds the spacing between them.
+```
+
+### Audit the privacy budget
+
+```bash
+uv run python hub/manage.py export_ledger --collaboration bahia-industry --period 2026-07
+```
+
+Every epsilon spend, in ledger order, with a **running cumulative total** beside
+the authorised budget on each row. Basic composition means epsilon adds
+linearly, so that column *is* the composition — an auditor can see whether the
+budget was ever exceeded without computing anything. The command refuses to
+report success on a short file: an export that looks complete and is not would
+be signed off.
+
 ### Multi-party demo
 
 ```bash

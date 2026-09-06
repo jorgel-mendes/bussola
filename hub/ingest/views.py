@@ -25,8 +25,10 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from benchmarks.positions import PositionUnavailable, position_for
+from bussola_contracts import CONTRACT_VERSION
 from catalog.models import MetricDefinition
-from ingest.models import Submission
+from ingest.models import ReportingPeriod, Submission
 from ingest.serializers import (
     MetricSpecSerializer,
     SubmissionAckSerializer,
@@ -111,6 +113,86 @@ def create_submission(request: Request) -> Response:
     submission.created = created
     body = SubmissionAckSerializer(submission).data
     return Response(body, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+def contributor_position(request: Request) -> Response:
+    """GET /api/v1/position/?metric=<code>&period=<label> — "where am I?" (S3-1)
+
+    THIS ENDPOINT COMPUTES NOTHING. It reads an already-published release and
+    places the caller's own submitted value against it. That is post-processing
+    of a differentially private output, so it spends no budget — which is what
+    makes it safe to expose to an agent that may poll it. An endpoint that
+    released statistics on read would let a cron job drain a collaboration's
+    budget overnight, and `test_position_api.py` asserts that this one does not.
+
+    The cohort is taken from the authenticated contributor, never from the
+    query string: a member cannot ask where it would sit in a cohort it does
+    not belong to.
+
+    404, not 200-with-nulls, when there is nothing to report. An empty quartile
+    rendered beside a real one reads as an answer.
+    """
+    contributor = request.user
+
+    metric_code = request.query_params.get("metric")
+    period_label = request.query_params.get("period")
+    if not metric_code or not period_label:
+        return Response(
+            {"detail": "Both 'metric' and 'period' are required.", "code": "missing_parameter"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Scoped to the caller's collaboration, so an unknown code and another
+    # group's code are indistinguishable from outside.
+    metric = MetricDefinition.objects.filter(
+        code=metric_code, collaboration=contributor.collaboration, is_active=True
+    ).first()
+    if metric is None:
+        return Response(
+            {"detail": f"No active metric '{metric_code}'.", "code": "unknown_metric"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    period = ReportingPeriod.objects.filter(
+        label=period_label, collaboration=contributor.collaboration
+    ).first()
+    if period is None:
+        return Response(
+            {"detail": f"No period '{period_label}'.", "code": "unknown_period"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        position = position_for(contributor=contributor, metric=metric, period=period)
+    except PositionUnavailable as exc:
+        # exc.code, not a single generic code: an agent must be able to tell
+        # "you never submitted" from "the operator has not released yet"
+        # without reading English.
+        return Response(
+            {"detail": str(exc), "code": exc.code},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    return Response(
+        {
+            "contract_version": CONTRACT_VERSION,
+            "metric_code": metric.code,
+            "metric_unit": metric.unit,
+            "period_label": period.label,
+            "cohort_code": contributor.cohort.code,
+            "your_value": str(position.submission_value),
+            "n_contributors": position.release.n_contributors,
+            "epsilon_spent": str(position.release.epsilon_spent),
+            "released_q25": str(position.released["q25"]),
+            "released_median": str(position.released["median"]),
+            "released_q75": str(position.released["q75"]),
+            "quartile": position.quartile,
+            "is_usable": position.is_usable,
+            "caveat": position.caveat,
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["GET"])

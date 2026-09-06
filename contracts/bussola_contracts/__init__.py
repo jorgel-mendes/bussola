@@ -9,6 +9,7 @@ Keep this package dependency-light (pydantic only). The agent must be
 installable on a plant machine without pulling in Django.
 """
 
+from bussola_contracts.position import PositionReport
 from bussola_contracts.submissions import (
     CONTRACT_VERSION,
     MetricSpec,
@@ -19,6 +20,7 @@ from bussola_contracts.submissions import (
 __all__ = [
     "CONTRACT_VERSION",
     "MetricSpec",
+    "PositionReport",
     "SubmissionAck",
     "SubmissionPayload",
 ]

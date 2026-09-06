@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 
 from bussola_agent.config import AgentConfig
-from bussola_contracts import MetricSpec, SubmissionAck, SubmissionPayload
+from bussola_contracts import MetricSpec, PositionReport, SubmissionAck, SubmissionPayload
 
 
 class HubError(RuntimeError):
@@ -15,6 +15,31 @@ class HubError(RuntimeError):
         super().__init__(message)
         self.status_code = status_code
         self.retryable = retryable
+
+
+class PositionUnavailable(HubError):
+    """The hub has no position to report, and said why in a machine-readable code.
+
+    A subclass of HubError so an existing `except HubError` still catches it,
+    but distinct because this is usually NOT a failure: "the operator has not
+    released this period yet" is the ordinary state of affairs for most of a
+    reporting period, and an agent that logged it as an error would train its
+    operator to ignore the log.
+    """
+
+    def __init__(self, message: str, *, code: str, retryable: bool):
+        super().__init__(message, status_code=404, retryable=retryable)
+        self.code = code
+
+
+#: How the hub's refusal codes map onto the agent's exit-code contract.
+#: Retryable means "the same call may succeed later without anything changing
+#: at this plant" -- which is true only while waiting for the operator.
+POSITION_REFUSALS = {
+    "not_submitted": False,
+    "not_published": True,
+    "incomplete_release": False,
+}
 
 
 class HubClient:
@@ -70,6 +95,39 @@ class HubClient:
 
         self._raise_for_status(response)
         return SubmissionAck.model_validate(response.json())
+
+    def fetch_position(self, *, metric: str, period: str) -> PositionReport:
+        """Ask the hub where this contributor sits against its cohort (S3-1).
+
+        A GET that costs no privacy budget: the hub reads an already-published
+        release and places our own submitted value against it. Safe to call from
+        cron, which is exactly why the endpoint refuses to compute anything.
+        """
+        url = f"{self.config.hub_url}/api/v1/position/"
+        try:
+            response = self._client.get(
+                url, headers=self._headers, params={"metric": metric, "period": period}
+            )
+        except httpx.RequestError as exc:
+            raise HubError(f"Could not reach hub at {url}: {exc}", retryable=True) from exc
+
+        if response.status_code == 404:
+            detail, code = self._detail_and_code(response)
+            if code in POSITION_REFUSALS:
+                raise PositionUnavailable(
+                    detail, code=code, retryable=POSITION_REFUSALS[code]
+                )
+
+        self._raise_for_status(response)
+        return PositionReport.model_validate(response.json())
+
+    @staticmethod
+    def _detail_and_code(response: httpx.Response) -> tuple[str, str | None]:
+        try:
+            body = response.json()
+        except ValueError:
+            return response.text, None
+        return body.get("detail", response.text), body.get("code")
 
     @staticmethod
     def _raise_for_status(response: httpx.Response) -> None:
