@@ -28,11 +28,27 @@ Environment:
 
     BUSSOLA_SEED_DEMO=1
         Also run `seed_demo`, which is itself idempotent.
+
+    BUSSOLA_DEMO_PERIOD=2026-07
+        Populate that period with submissions, so the deployed hub has
+        something to publish. Without this the hub is a correct but empty
+        system: contributors registered, no data, every cell suppressed at
+        0 < min_contributors. A reviewer opening the URL cold sees nothing.
+
+    BUSSOLA_DEMO_RESERVE="plant-01 plant-02 plant-03"
+        Contributors to leave OUT of that bulk load, reserved for the agent
+        containers to submit live. The multi-party claim belongs to the real
+        agents crossing a real network boundary; this only fills the cohort
+        up to a size where a DP quantile means anything.
+
+    BUSSOLA_DEMO_BUDGET=6.0     epsilon_total for the period, if not already set
+    BUSSOLA_DEMO_EPSILON=1.0    epsilon per cell; runs release_period
 """
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -47,6 +63,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         self._ensure_superuser()
         self._maybe_seed()
+        self._maybe_populate()
 
     # --- superuser ---------------------------------------------------------
 
@@ -112,3 +129,137 @@ class Command(BaseCommand):
         # premise is not leaking things.
         call_command("seed_demo", no_token_output=True, stdout=self.stdout)
         self.stdout.write(self.style.SUCCESS("bootstrap: demo data seeded."))
+
+    # --- demo data and releases --------------------------------------------
+
+    def _maybe_populate(self) -> None:
+        """Give the deployed hub something to publish.
+
+        Deliberately guarded on "are there already submissions for this
+        period?" rather than on a flag alone. Regenerating and reloading on
+        every container restart would be wasted work, and re-running
+        release_period against a period whose budget is already spent would
+        print refusals into the boot log on every deploy.
+        """
+        label = os.environ.get("BUSSOLA_DEMO_PERIOD", "").strip()
+        if not label:
+            self.stdout.write("bootstrap: BUSSOLA_DEMO_PERIOD not set — no demo data loaded.")
+            return
+
+        from django.conf import settings
+
+        from ingest.models import ReportingPeriod, Submission
+
+        try:
+            period = ReportingPeriod.objects.get(label=label)
+        except ReportingPeriod.DoesNotExist:
+            raise CommandError(
+                f"bootstrap: BUSSOLA_DEMO_PERIOD={label!r} does not exist. "
+                f"Seed the collaboration first (BUSSOLA_SEED_DEMO=1)."
+            ) from None
+        except ReportingPeriod.MultipleObjectsReturned:
+            raise CommandError(
+                f"bootstrap: more than one collaboration has a period {label!r}. "
+                f"Load its submissions by hand rather than guessing which."
+            ) from None
+
+        if Submission.objects.filter(period=period).exists():
+            self.stdout.write(
+                f"bootstrap: {label} already has submissions — nothing reloaded."
+            )
+        else:
+            self._generate_and_load(period, settings)
+
+        self._maybe_release(period)
+
+    def _generate_and_load(self, period, settings) -> None:
+        """Generate synthetic data and load it as submissions.
+
+        The data is generated rather than shipped: `data/` is gitignored
+        because it holds issued tokens, and `datagen` is deterministic under
+        its fixed seed, so generating at boot gives byte-identical values to a
+        committed copy without committing 3 MB of CSV or any credential.
+        """
+        import subprocess
+        import sys
+        import tempfile
+
+        generator = settings.REPO_DIR / "datagen" / "generate.py"
+        if not generator.exists():
+            raise CommandError(f"bootstrap: {generator} is missing from this image.")
+
+        reserved = os.environ.get("BUSSOLA_DEMO_RESERVE", "").split()
+        collaboration = period.collaboration
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self.stdout.write("bootstrap: generating synthetic contributor data…")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(generator),
+                    "--contributors",
+                    str(collaboration.contributors.count()),
+                    "--periods",
+                    str(collaboration.periods.count()),
+                    "--out",
+                    tmp,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            # Checked explicitly rather than through a pipe. Sprint 1's third
+            # defect was a command whose exit status still looked clean.
+            if result.returncode != 0:
+                raise CommandError(
+                    f"bootstrap: datagen failed ({result.returncode}): {result.stderr[-500:]}"
+                )
+
+            call_command(
+                "load_submissions",
+                collaboration=collaboration.slug,
+                data_dir=Path(tmp),
+                period=period.label,
+                skip=reserved,
+                stdout=self.stdout,
+            )
+        if reserved:
+            self.stdout.write(
+                f"bootstrap: reserved {', '.join(reserved)} for live agent submissions."
+            )
+
+    def _maybe_release(self, period) -> None:
+        from decimal import Decimal
+
+        from budget.models import BudgetPeriod
+
+        total = os.environ.get("BUSSOLA_DEMO_BUDGET", "").strip()
+        epsilon = os.environ.get("BUSSOLA_DEMO_EPSILON", "").strip()
+
+        if total:
+            budget, created = BudgetPeriod.objects.get_or_create(
+                period=period, defaults={"epsilon_total": Decimal(total)}
+            )
+            # get_or_create, never update. Raising a budget that already has
+            # spends against it would retroactively authorise disclosure the
+            # collaboration never agreed to, and doing it silently on every
+            # container restart would be worse still.
+            if created:
+                self.stdout.write(f"bootstrap: budget for {period.label} set to ε={total}.")
+            else:
+                self.stdout.write(
+                    f"bootstrap: {period.label} already has a budget "
+                    f"(ε={budget.epsilon_total}, {budget.remaining()} remaining) — unchanged."
+                )
+
+        if not epsilon:
+            self.stdout.write("bootstrap: BUSSOLA_DEMO_EPSILON not set — nothing released.")
+            return
+
+        call_command(
+            "release_period",
+            collaboration=period.collaboration.slug,
+            period=period.label,
+            epsilon=Decimal(epsilon),
+            stdout=self.stdout,
+        )

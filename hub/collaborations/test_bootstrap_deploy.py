@@ -202,3 +202,86 @@ def test_a_restart_with_a_weak_env_password_does_not_fail_the_deploy():
     assert "already exists" in output
     assert User.objects.count() == 1
     assert User.objects.get(username="analyst").check_password("tR7-quartile-ledger-92")
+
+
+# --- demo data and releases ----------------------------------------------
+#
+# Without these steps the deployed hub is a correct but EMPTY system:
+# contributors registered, no submissions, every cell suppressed at
+# 0 < min_contributors. A reviewer opening the URL cold sees nothing, and the
+# privacy layer has nothing to demonstrate.
+
+
+def test_no_demo_period_means_no_data_is_loaded():
+    from ingest.models import Submission
+
+    output = run(BUSSOLA_SEED_DEMO="1")
+
+    assert "no demo data loaded" in output
+    assert Submission.objects.count() == 0
+
+
+def test_an_unknown_demo_period_fails_the_deploy():
+    """Refusing to guess. A typo'd period that silently loaded nothing would
+    leave an empty hub reporting a successful boot."""
+    from django.core.management.base import CommandError
+
+    with pytest.raises(CommandError, match="does not exist"):
+        run(BUSSOLA_SEED_DEMO="1", BUSSOLA_DEMO_PERIOD="1999-01")
+
+
+def test_a_period_that_already_has_submissions_is_not_reloaded(
+    collaboration, metric, period, make_contributors
+):
+    """Container restarts must not redo the work on every deploy."""
+    make_contributors(metric, period, ["3000", "3100", "3200"])
+
+    output = run(BUSSOLA_DEMO_PERIOD=period.label)
+
+    assert "already has submissions" in output
+
+
+def test_an_existing_budget_is_never_raised_on_restart(period, cohort, metric):
+    """get_or_create, never update.
+
+    Raising a budget that already has spends against it would retroactively
+    authorise disclosure the collaboration never agreed to — and doing it
+    silently on every container restart would be worse still.
+    """
+    from decimal import Decimal
+
+    from budget.models import BudgetPeriod
+    from contributors.models import Contributor
+    from ingest.models import Submission
+
+    BudgetPeriod.objects.create(period=period, epsilon_total=Decimal("2.0000"))
+    # A submission so the load step is skipped and only the budget path runs.
+    Submission.objects.create(
+        contributor=Contributor.objects.create(
+            collaboration=period.collaboration, name="Plant 99", cohort=cohort
+        ),
+        period=period,
+        metric=metric,
+        value=Decimal("3000"),
+        n_records=30,
+        agent_version="test",
+    )
+
+    output = run(BUSSOLA_DEMO_PERIOD=period.label, BUSSOLA_DEMO_BUDGET="99.0")
+
+    assert "already has a budget" in output
+    assert BudgetPeriod.objects.get(period=period).epsilon_total == Decimal("2.0000")
+
+
+def test_no_epsilon_means_nothing_is_released(
+    collaboration, metric, period, make_contributors
+):
+    """Publishing spends budget, so it stays an explicit decision."""
+    from benchmarks.models import BenchmarkRelease
+
+    make_contributors(metric, period, ["3000", "3100", "3200", "3300", "3400", "3500"])
+
+    output = run(BUSSOLA_DEMO_PERIOD=period.label, BUSSOLA_DEMO_BUDGET="5.0")
+
+    assert "nothing released" in output
+    assert BenchmarkRelease.objects.count() == 0
