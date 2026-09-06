@@ -13,9 +13,17 @@ appears to work. Removing the affordance is part of the control, not decoration.
 from __future__ import annotations
 
 from django.contrib import admin
+from django.http import HttpResponse
 
 from budget.exceptions import UnsupportedAccountant
+from budget.export import export_filename, write_ledger_csv
 from budget.models import BudgetPeriod, LedgerEntry
+
+
+def _csv_response(filename: str) -> HttpResponse:
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
 
 
 class LedgerEntryInline(admin.TabularInline):
@@ -79,6 +87,37 @@ class BudgetPeriodAdmin(admin.ModelAdmin):
         except UnsupportedAccountant:
             return "— (accountant not implemented)"
 
+    # S3-4. One period, one file, every entry -- which is the unit an auditor
+    # actually reviews. Exporting a hand-picked selection is offered on the
+    # ledger changelist instead, and is deliberately labelled as a selection.
+    @admin.action(description="Export this period's full ledger as CSV")
+    def export_ledger_csv(self, request, queryset):
+        if queryset.count() != 1:
+            self.message_user(
+                request,
+                "Select exactly one period. A single file merging several periods "
+                "would carry a cumulative total that spans separate budgets, which "
+                "is not a number that means anything.",
+                level="error",
+            )
+            return None
+
+        budget = queryset.get()
+        entries = budget.entries.select_related(
+            "budget_period__period__collaboration", "cohort", "metric"
+        ).order_by("created_at", "id")
+
+        response = _csv_response(
+            export_filename(
+                collaboration_slug=budget.period.collaboration.slug,
+                period_label=budget.period.label,
+            )
+        )
+        write_ledger_csv(entries, response, budget_total=budget.epsilon_total)
+        return response
+
+    actions = ["export_ledger_csv"]
+
 
 @admin.register(LedgerEntry)
 class LedgerEntryAdmin(admin.ModelAdmin):
@@ -101,3 +140,20 @@ class LedgerEntryAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None) -> bool:
         return False
+
+    # S3-4. A SELECTION, and the name says so. The cumulative column on a
+    # filtered subset is the running total of what was selected, not of the
+    # period -- an auditor reconciling against a budget wants the period export
+    # on BudgetPeriod, and calling this one "full ledger" would invite exactly
+    # that mistake.
+    @admin.action(description="Export selected entries as CSV")
+    def export_selected_csv(self, request, queryset):
+        entries = queryset.select_related(
+            "budget_period__period__collaboration", "cohort", "metric"
+        ).order_by("created_at", "id")
+
+        response = _csv_response("bussola-ledger-selection.csv")
+        write_ledger_csv(entries, response)
+        return response
+
+    actions = ["export_selected_csv"]
