@@ -32,24 +32,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import ROUND_CEILING, Decimal
 
-import opendp.prelude as dp
-import polars as pl
 from django.db import transaction
 
 from benchmarks.models import BenchmarkRelease, ReleasedStatistic
 from benchmarks.selectors import submissions_for
 from budget.accountant import budget_for, spend
 from budget.exceptions import CrossCollaborationSpend
+from privacy.contexts import PUBLIC_MAX_ROWS, build_context
 from privacy.mechanisms import get_mechanism, is_supported
 
-dp.enable_features("contrib")
-
-#: Public upper bound on rows in one cell, declared to OpenDP as a Margin.
-#: Membership is public (DESIGN.md section 2.2), so a public bound on the row
-#: count leaks nothing -- and OpenDP requires one for quantile queries
-#: (ADR-0003, blocker 3). Deliberately generous and constant: deriving it from
-#: the actual number of contributors would make it a function of the data.
-PUBLIC_MAX_ROWS = 10_000
+__all__ = ["PUBLIC_MAX_ROWS", "ReleaseOutcome", "per_statistic_epsilon", "release_benchmark",
+           "statistics_to_release"]
 
 #: Epsilon is charged at the ledger column's resolution.
 EPSILON_QUANTUM = Decimal("0.000001")
@@ -89,13 +82,17 @@ def statistics_to_release(metric) -> tuple[list[str], list[str]]:
     return releasable, skipped
 
 
-def _per_statistic_epsilon(total: Decimal, count: int) -> Decimal:
+def per_statistic_epsilon(total: Decimal, count: int) -> Decimal:
     """Split a release's epsilon evenly, rounding UP at the ledger's resolution.
 
     Rounding up rather than down is deliberate. The charge must never be less
     than what the mechanism actually spends; rounding down would under-charge
     the budget by a fraction of a unit on every release, and those fractions
     accumulate in the direction that matters.
+
+    Public rather than private because `evaluation/sweep.py` charges the same
+    way. A sweep that split epsilon differently from the product would be
+    reporting the accuracy of a system nobody runs.
     """
     return (total / count).quantize(EPSILON_QUANTUM, rounding=ROUND_CEILING)
 
@@ -146,7 +143,7 @@ def release_benchmark(*, cohort, metric, period, epsilon: Decimal) -> ReleaseOut
         )
 
     budget_period = budget_for(period)
-    per_statistic = _per_statistic_epsilon(epsilon, len(releasable))
+    per_statistic = per_statistic_epsilon(epsilon, len(releasable))
     total_charged = per_statistic * len(releasable)
 
     # The release row is created before its statistics because LedgerEntry.release
@@ -161,12 +158,11 @@ def release_benchmark(*, cohort, metric, period, epsilon: Decimal) -> ReleaseOut
         epsilon_spent=total_charged,
     )
 
-    context = dp.Context.compositor(
-        data=pl.LazyFrame({"value": [float(v) for v in values]}),
-        privacy_unit=dp.unit_of(contributions=metric.contributions_per_period),
-        privacy_loss=dp.loss_of(epsilon=float(total_charged)),
+    context = build_context(
+        values,
+        contributions=metric.contributions_per_period,
+        epsilon=total_charged,
         split_evenly_over=len(releasable),
-        margins=[dp.polars.Margin(max_length=PUBLIC_MAX_ROWS)],
     )
 
     released: list[ReleasedStatistic] = []

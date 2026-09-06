@@ -7,10 +7,11 @@ Quantic MSSE Capstone · Jorge Luis dos Santos Mendes
 
 | Deliverable | Status |
 |---|---|
+| **Deployed version** | <https://bussola-hub.onrender.com> ✅ live |
 | **Task board** (Trello) | [Bussola — MSSE Capstone](https://trello.com/b/ZMEqk4Up/bussola-msse-capstone) ✅ public |
 | **Design & testing doc** | [`docs/DESIGN.md`](docs/DESIGN.md) ✅ |
-| **Deployed version** | Sprint 1 runs locally. Render blueprint is committed (`render.yaml`); URL goes here when deployed. |
-| **Demo recording** | One per sprint — record Sprint 1 even though it is local |
+| **Sprint reviews** | [Sprint 1](docs/SPRINT-1-REVIEW.md) ✅ · [Sprint 2](docs/SPRINT-2-REVIEW.md) ✅ |
+| **Demo recording** | One per sprint; the final 15–20 minute video is an edit of the three |
 
 ---
 
@@ -59,10 +60,47 @@ The seeded demo is industrial: cement plants, specific thermal energy, bounds
 justified from process thermodynamics and the EU BAT reference document
 ([docs/REFERENCES.md](docs/REFERENCES.md)).
 
-> ### ⚠ Sprint 1 status
-> This build publishes **exact, unprotected statistics** behind a warning banner.
-> It exists to prove ingestion, deployment and CI end to end. Differential
-> privacy arrives in Sprint 2. **Do not point this build at real plant data.**
+---
+
+## What this build does
+
+Every statistic the dashboard publishes is **differentially private**. Quartiles
+are released with the exponential mechanism over a candidate grid derived from
+the metric's public bounds — never from the submitted data. Each release charges
+its epsilon to an append-only ledger inside the same database transaction that
+writes the release, and a release that would exceed the reporting period's budget
+is **refused** rather than served.
+
+Three things follow, and they are the product:
+
+- **No exact value is reachable anywhere in the UI.** The Sprint 1 exact path
+  survives only in tests and in the before/after demo comparison.
+- **A release and its ledger entry cannot exist without each other.**
+  `LedgerEntry.release` is `NOT NULL`, the write is one transaction, and the
+  invariant is asserted in both directions.
+- **The system says when its own answer is unusable.** See below.
+
+### When the answer is too noisy to use
+
+Each quantile is drawn independently, so at small N the noise can exceed the
+spacing between them and the ordering inverts. On the deployed hub, a six-
+contributor cohort released a third quartile *below* its first:
+
+| Cohort | N | q25 | median | q75 | |
+|---|---|---|---|---|---|
+| `2011` | 50 | 3048.0 | 3718.9 | 4175.1 | usable |
+| `2320` | 47 | 3155.4 | 3370.1 | 4309.2 | usable |
+| `2farm` | 6 | **158.5** | 190.9 | **73.4** | **q75 below q25** |
+
+It reproduced across three seeds, so it is a property of the mechanism at that
+scale rather than a fluke. `BenchmarkRelease.quantiles_are_ordered` detects it
+without touching the data, and the dashboard tells the member the release is too
+noisy to use.
+
+It is deliberately **not** fixed by sorting. Sorting would be privacy-safe —
+differential privacy is closed under post-processing — but it would conceal the
+one signal telling a member not to trust the release, replacing a visibly broken
+number with an invisibly meaningless one.
 
 ---
 
@@ -85,6 +123,7 @@ its own data.
 | `agent/` | standalone CLI | Reads local CSV, computes aggregate, submits |
 | `contracts/` | pydantic | The single wire-format definition both sides import |
 | `datagen/` | script | Synthetic multi-plant data **with ground truth** |
+| `evaluation/` | pytest → CSV | The privacy–utility sweep (SPEC §8) |
 
 ### Django apps
 
@@ -94,8 +133,8 @@ its own data.
 | `contributors` | 1 | Contributors, hashed API tokens |
 | `catalog` | 1 | Metric definitions — bounds, rationale, privacy unit |
 | `ingest` | 1 | Reporting periods, submissions, the API |
-| `benchmarks` | 1 | Aggregation and the dashboard |
-| `privacy` | 2 | OpenDP mechanism wrappers |
+| `benchmarks` | 1–2 | Aggregation, the DP release path, the dashboard |
+| `privacy` | 2 | OpenDP mechanism strategies and their registry |
 | `budget` | 2 | Epsilon budget and the append-only ledger |
 
 ---
@@ -124,6 +163,28 @@ uv run bussola-agent submit --metric specific_thermal_energy --period 2026-07 \
 Drop `--dry-run` to actually submit. The dashboard is at <http://127.0.0.1:8000/>,
 the admin at `/admin/` (`createsuperuser` first).
 
+### Publish a differentially private release
+
+Check what a release would cost before spending anything:
+
+```bash
+uv run python hub/manage.py release_period --collaboration bahia-industry --period 2026-07 --epsilon 1.0 --dry-run
+```
+
+`--dry-run` reports the cells it would publish and the statistics it would skip,
+and **spends no budget** — epsilon, once spent, cannot be refunded, so the
+operator guide is emphatic about running this first. Drop the flag to publish:
+
+```bash
+uv run python hub/manage.py release_period --collaboration bahia-industry --period 2026-07 --epsilon 1.0
+```
+
+The command reports every cell it published, every cell it suppressed for having
+too few contributors, and — when the period's budget runs out — the cell it
+REFUSED, what it needed, and what is actually left after the rollback. Each cell
+is its own transaction: a cell that cannot be paid for never undoes cells already
+published, because those are real disclosures the ledger has to keep.
+
 ### Multi-party demo
 
 ```bash
@@ -144,15 +205,25 @@ uv run pytest --cov --cov-report=term-missing
 uv run ruff check .
 ```
 
-144 tests as of Sprint 1. Several defend **privacy invariants** rather than mere
-correctness, and say so in their docstrings — notably submission idempotency (a
-contributor that submits twice would double its weight and break the sensitivity
-bound the guarantee rests on), contributor-identity-from-token, and the
-cross-collaboration tenancy boundary.
+**280 tests, 83% coverage**, zero skips on Postgres. Several defend **privacy
+invariants** rather than mere correctness, and say so in their docstrings —
+notably submission idempotency (a contributor that submits twice would double its
+weight and break the sensitivity bound the guarantee rests on),
+contributor-identity-from-token, and the cross-collaboration tenancy boundary.
 
-CI runs against **Postgres, not SQLite**: the Sprint 2 budget accountant relies
-on `select_for_update()`, which is a no-op on SQLite, so those tests would pass
-vacuously.
+Test categories added in Sprint 2: concurrency (K parallel releases on real
+threads against real Postgres), property-based (`hypothesis` over random release
+sequences), mechanism/statistical, release-invariant, immutability, and an
+environment guard.
+
+CI runs against **Postgres, not SQLite**: the budget accountant relies on
+`select_for_update()`, which is a no-op on SQLite, so those tests would pass
+vacuously. `hub/test_postgres_guard.py` fails the build if they skip instead of
+running — a silent skip would reduce the project's most important test to a green
+tick that proves nothing.
+
+The suite takes ~11 minutes on CI, most of it OpenDP releases in the mechanism
+tests. That cost is deliberate and was accepted rather than trimmed.
 
 ---
 
@@ -169,14 +240,29 @@ The agent runs unattended from cron, so exit codes are its real interface:
 
 ---
 
-## Sprint 1 scope
+## Status
 
-**Done:** domain model with DB-level constraints · `Collaboration` tenancy ·
-token auth · ingestion API · agent CLI with dry-run · synthetic data with ground
-truth · exact benchmark dashboard · admin console · CI · Docker · Render
-blueprint.
+**Sprint 1 — the pipeline.** Domain model with DB-level constraints ·
+`Collaboration` tenancy · token auth · ingestion API · agent CLI with dry-run ·
+synthetic data with ground truth · exact benchmark dashboard behind an UNSAFE
+banner · admin console · CI · Docker · Render blueprint.
 
-**Deliberately deferred to Sprint 2:** OpenDP integration · privacy budget
-ledger · accuracy intervals · anything cryptographic.
+**Sprint 2 — the guarantee.** Quantile mechanisms behind a Strategy + Registry ·
+per-period epsilon budget · append-only ledger · budget refusal · suppression
+below the contributor threshold · release and ledger in one transaction ·
+per-contributor value list deleted · deployed to Render. Reviewed in
+[`docs/SPRINT-2-REVIEW.md`](docs/SPRINT-2-REVIEW.md).
+
+**Sprint 3 — the evidence (in progress).** The privacy–utility sweep · accuracy
+intervals by simulation · the privacy–utility curve in the dashboard ·
+contributor self-service position view · ledger CSV export for the auditor.
+
+### Deliberately not built
+
+| | Why |
+|---|---|
+| Count, mean and standard deviation mechanisms | Far worse value per unit of epsilon. At ε = 1 split three ways, a DP mean's interval came back wider than the sum being estimated. Shipping only the statistic that works is a position, not a gap |
+| zCDP accountant | Basic composition can be checked with a calculator and explained on camera. `BudgetPeriod.accountant` carries the choice and refuses loudly rather than mis-accounting |
+| Anything cryptographic | Central DP with a trusted curator is the architecture, and it is argued in [ADR-0002](docs/adr/0002-central-dp-over-local-dp.md) rather than assumed |
 
 A thin slice that reaches production beats a thick slice that doesn't.
