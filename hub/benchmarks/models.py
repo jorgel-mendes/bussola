@@ -58,6 +58,28 @@ class ImmutableModel(models.Model):
         )
 
 
+#: Quantile statistics, in distribution order. Ordering is what makes a released
+#: triple checkable against itself.
+QUANTILE_STATISTICS = ("q25", "median", "q75")
+
+
+def quantiles_ordered(values) -> bool | None:
+    """Whether a released quantile triple is monotone.
+
+    Pure and free of the ORM so `evaluation/sweep.py` can apply the product's
+    own usability rule to a simulated release. The sweep reports how often a
+    release at a given epsilon and N is unusable; if it decided "unusable" by a
+    different rule from the dashboard, the number would describe nothing the
+    member ever sees.
+
+    Returns None when there are fewer than two quantiles to compare.
+    """
+    if len(values) < 2:
+        return None
+    ordered = [values[k] for k in QUANTILE_STATISTICS if k in values]
+    return all(a <= b for a, b in zip(ordered, ordered[1:], strict=False))
+
+
 class BenchmarkRelease(ImmutableModel):
     """One published, differentially private benchmark for one cell."""
 
@@ -123,15 +145,13 @@ class BenchmarkRelease(ImmutableModel):
 
         Returns None when the release has no quantiles to compare.
         """
-        values = {
-            s.statistic: s.value
-            for s in self.statistics.all()
-            if s.statistic in {"q25", "median", "q75"}
-        }
-        if len(values) < 2:
-            return None
-        ordered = [values[k] for k in ("q25", "median", "q75") if k in values]
-        return all(a <= b for a, b in zip(ordered, ordered[1:], strict=False))
+        return quantiles_ordered(
+            {
+                s.statistic: s.value
+                for s in self.statistics.all()
+                if s.statistic in QUANTILE_STATISTICS
+            }
+        )
 
 
 #: Reading order for a distribution. Alphabetical ordering puts "median"

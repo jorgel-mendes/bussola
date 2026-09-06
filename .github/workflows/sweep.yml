@@ -1,0 +1,49 @@
+name: Privacy-utility sweep
+
+# Its own workflow, not a job in ci.yml, for a measured reason: the grid is
+# 7 epsilons x 5 cohort sizes x 200 trials x 3 OpenDP releases, ~1.2s per trial.
+# Putting it in the main suite would put every push behind roughly two hours.
+#
+# The sweep needs no database. It runs the mechanism, not the transaction around
+# it, so there is no Postgres service here and no migrations step.
+
+on:
+  workflow_dispatch:
+    inputs:
+      trials:
+        description: "Trials per cell (200 is the SPEC figure)"
+        default: "200"
+  schedule:
+    # Weekly, so the curve is regenerated if a dependency moves under us.
+    - cron: "17 4 * * 0"
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run the sweep
+        run: uv run pytest evaluation -m sweep -p no:randomly
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.test
+
+      - name: Upload the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: privacy-utility-sweep
+          path: evaluation/results/sweep.csv

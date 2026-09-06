@@ -49,12 +49,18 @@ class BenchmarkResult:
         )
 
 
-def _quantile(sorted_values: list[Decimal], q: float) -> Decimal:
+def exact_quantile(sorted_values: list[Decimal], q: float) -> Decimal:
     """Linear-interpolation quantile.
 
-    Sprint 2 replaces this entirely: OpenDP's exponential mechanism selects from
-    a candidate grid rather than interpolating between observed values, because
-    interpolating between two real data points is itself disclosive.
+    Sprint 2 replaced this on the release path: OpenDP's exponential mechanism
+    selects from a candidate grid rather than interpolating between observed
+    values, because interpolating between two real data points is itself
+    disclosive.
+
+    It survives as the definition of "true" -- the exact statistic the sweep in
+    `evaluation/` measures the noisy release against. That is the only honest
+    baseline: comparing a DP release to some other library's quantile would fold
+    a definitional difference into what gets reported as privacy cost.
     """
     if not sorted_values:
         raise ValueError("no values")
@@ -126,28 +132,44 @@ def compute_exact_benchmark(
         period=period,
         n_contributors=n,
         min_contributors=threshold,
-        q25=_quantile(values, 0.25),
-        median=_quantile(values, 0.50),
-        q75=_quantile(values, 0.75),
+        q25=exact_quantile(values, 0.25),
+        median=exact_quantile(values, 0.50),
+        q75=exact_quantile(values, 0.75),
         minimum=values[0],
         maximum=values[-1],
         suppressed=False,
     )
 
 
-def contributor_position(value: Decimal, result: BenchmarkResult) -> str:
-    """Which quartile a contributor falls in.
+def quartile_of(value, q25, median, q75) -> str:
+    """Which quartile a value falls in, given three boundaries.
 
-    This is the number the member actually cares about, and in Sprint 2 it
-    becomes the evaluation's headline metric: the rate at which noisy releases
-    still place a contributor in the correct quartile.
+    Split out from `contributor_position` so the sweep can score a NOISY triple
+    with exactly the rule the dashboard uses on a real release. Misassignment is
+    the evaluation's headline metric -- the rate at which a DP release still
+    places a contributor in the correct quartile -- and it is only meaningful if
+    "correct" is decided by the same comparison the product makes.
+
+    Boundaries are compared with <=, so a value sitting exactly on q25 reads as
+    Q1. Which side a boundary belongs to is arbitrary; being inconsistent about
+    it between the true and noisy triples would not be.
     """
-    if result.suppressed or result.q25 is None:
+    if q25 is None or median is None or q75 is None:
         return "unknown"
-    if value <= result.q25:
+    if value <= q25:
         return "Q1"
-    if value <= result.median:
+    if value <= median:
         return "Q2"
-    if value <= result.q75:
+    if value <= q75:
         return "Q3"
     return "Q4"
+
+
+def contributor_position(value: Decimal, result: BenchmarkResult) -> str:
+    """Which quartile a contributor falls in, against a computed benchmark.
+
+    This is the number the member actually cares about.
+    """
+    if result.suppressed:
+        return "unknown"
+    return quartile_of(value, result.q25, result.median, result.q75)

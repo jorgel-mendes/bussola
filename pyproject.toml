@@ -44,10 +44,19 @@ bussola-agent = { workspace = true }
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.test"
-pythonpath = ["hub"]
-testpaths = ["hub", "agent", "tests"]
+# "." puts the repo root on the path so `evaluation` imports as a package.
+pythonpath = ["hub", "."]
+testpaths = ["hub", "agent", "tests", "evaluation"]
 python_files = ["test_*.py"]
-addopts = "-q --strict-markers"
+# The sweep grid is deselected by default. Its FAST tests -- the measurement
+# functions the article's numbers come from -- are unmarked and run on every
+# push; only the 35-cell grid is held back, in its own CI job (sweep.yml).
+# Deselecting the slow tests rather than the whole directory is deliberate: a
+# harness whose tests never run is a harness nobody trusts.
+addopts = "-q --strict-markers -m 'not sweep'"
+markers = [
+    "sweep: the full privacy-utility grid. Minutes, not seconds. Run with `-m sweep`.",
+]
 
 [tool.coverage.run]
 source = ["hub", "agent/bussola_agent", "contracts/bussola_contracts"]
@@ -77,6 +86,7 @@ known-first-party = [
     "collaborations",
     "config",
     "contributors",
+    "evaluation",
     "ingest",
     "privacy",
 ]
