@@ -181,3 +181,124 @@ def test_check_command_reports_reachability(env):
     assert result.exit_code == 0
     assert "hub reachable" in result.output
     assert "specific_thermal_energy" in result.output
+
+
+# --- position (S3-1) --------------------------------------------------------
+
+POSITION_JSON = {
+    "contract_version": "1.0",
+    "metric_code": "specific_thermal_energy",
+    "metric_unit": "MJ/t clinker",
+    "period_label": "2026-07",
+    "cohort_code": "2320",
+    "your_value": "3100.000000",
+    "n_contributors": 47,
+    "epsilon_spent": "1.000000",
+    "released_q25": "3000.000000",
+    "released_median": "3400.000000",
+    "released_q75": "3800.000000",
+    "quartile": "Q2",
+    "is_usable": True,
+    "caveat": "Quartile boundaries are differentially private releases.",
+}
+
+
+@respx.mock
+def test_position_reports_the_quartile(env):
+    respx.get("https://hub.example/api/v1/position/").mock(
+        return_value=httpx.Response(200, json=POSITION_JSON)
+    )
+
+    result = runner.invoke(app, ["position", "--metric", "specific_thermal_energy",
+                                 "--period", "2026-07"])
+
+    assert result.exit_code == 0
+    assert "You are in Q2." in result.stdout
+    assert "47 contributors" in result.stdout
+
+
+@respx.mock
+def test_position_shows_the_caveat_that_the_boundaries_are_noisy(env):
+    """A quartile shown without it would be read as an exact placement."""
+    respx.get("https://hub.example/api/v1/position/").mock(
+        return_value=httpx.Response(200, json=POSITION_JSON)
+    )
+
+    result = runner.invoke(app, ["position", "--metric", "specific_thermal_energy",
+                                 "--period", "2026-07"])
+
+    assert "differentially private" in result.stdout
+
+
+@respx.mock
+def test_position_refuses_to_place_the_plant_on_an_unusable_release(env):
+    """The Sprint 2 N=6 finding, as the member experiences it."""
+    respx.get("https://hub.example/api/v1/position/").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                **POSITION_JSON,
+                "released_q25": "3800.000000",
+                "released_q75": "3000.000000",
+                "quartile": "unknown",
+                "is_usable": False,
+                "caveat": "This release is too noisy to place you against.",
+            },
+        )
+    )
+
+    result = runner.invoke(app, ["position", "--metric", "specific_thermal_energy",
+                                 "--period", "2026-07"])
+
+    assert result.exit_code == 0
+    assert "cannot be reported" in result.stdout
+    assert "too noisy" in result.stdout
+    # The numbers are still shown, so the operator can see WHY it was refused.
+    assert "3800.000000" in result.stdout
+
+
+@respx.mock
+def test_position_not_yet_released_is_retryable_not_a_failure(env):
+    """For most of a reporting period this is simply the state of the world.
+
+    Exit 3, not 1 or 2: nothing at the plant needs to change, and the same call
+    will succeed once the operator releases. A red error here would train an
+    operator to ignore the agent's log.
+    """
+    respx.get("https://hub.example/api/v1/position/").mock(
+        return_value=httpx.Response(
+            404, json={"detail": "Nothing has been published yet.", "code": "not_published"}
+        )
+    )
+
+    result = runner.invoke(app, ["position", "--metric", "specific_thermal_energy",
+                                 "--period", "2026-07"])
+
+    assert result.exit_code == EXIT_RETRYABLE
+
+
+@respx.mock
+def test_position_without_a_submission_is_a_local_problem(env):
+    """Retrying never fixes this one — the plant has to submit first."""
+    respx.get("https://hub.example/api/v1/position/").mock(
+        return_value=httpx.Response(
+            404, json={"detail": "You have not submitted.", "code": "not_submitted"}
+        )
+    )
+
+    result = runner.invoke(app, ["position", "--metric", "specific_thermal_energy",
+                                 "--period", "2026-07"])
+
+    assert result.exit_code == EXIT_LOCAL_ERROR
+
+
+@respx.mock
+def test_position_reports_a_revoked_token_as_rejected(env):
+    respx.get("https://hub.example/api/v1/position/").mock(
+        return_value=httpx.Response(401, json={"detail": "Invalid token."})
+    )
+
+    result = runner.invoke(app, ["position", "--metric", "specific_thermal_energy",
+                                 "--period", "2026-07"])
+
+    assert result.exit_code == EXIT_REJECTED
