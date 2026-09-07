@@ -11,8 +11,14 @@ hub/staticfiles/*
 
 # Secrets and generated data
 .env
-data/
-!data/.gitkeep
+# ANCHORED. Unanchored `data/` matches a directory of that name at ANY depth,
+# which silently swallowed hub/benchmarks/data/sweep_summary.csv -- the digest
+# the dashboard reads to show what the sweep measured. The file existed locally,
+# every test passed, and it would simply have been absent from the deployed
+# image, with the curve quietly not rendering. Only the leading slash confines
+# this to the generated plant CSVs it was written for.
+/data/
+!/data/.gitkeep
 
 # Tooling
 .pytest_cache/

@@ -21,6 +21,7 @@ from __future__ import annotations
 from django.shortcuts import get_object_or_404, render
 
 from benchmarks.models import BenchmarkRelease, display_sorted
+from benchmarks.utility import curve_series, reading_for
 from catalog.models import MetricDefinition
 from collaborations.models import Cohort, Collaboration
 from ingest.models import ReportingPeriod
@@ -49,6 +50,7 @@ def benchmark_index(request):
     statistics = []
     cohort = metric = period = None
     n_submissions = 0
+    utility = None
 
     if selected_cohort and selected_metric and selected_period:
         cohort = get_object_or_404(Cohort, code=selected_cohort, collaboration=collaboration)
@@ -69,6 +71,12 @@ def benchmark_index(request):
             # Reading order, not the model's alphabetical Meta ordering,
             # which puts "median" before "q25".
             statistics = display_sorted(release.statistics.all())
+            # S3-3. What the sweep measured at this release's own epsilon and
+            # cohort size. Static data read from a committed digest — no
+            # mechanism runs, so this costs nothing and cannot fail the page.
+            utility = reading_for(
+                epsilon=release.epsilon_spent, n=release.n_contributors
+            )
         else:
             # Contributor count only, so an unreleased cell can explain itself.
             # Membership is public (DESIGN.md section 2.2), so this leaks
@@ -97,5 +105,7 @@ def benchmark_index(request):
             "statistics": statistics,
             "n_submissions": n_submissions,
             "min_contributors": collaboration.effective_min_contributors,
+            "utility": utility,
+            "curve": curve_series(),
         },
     )

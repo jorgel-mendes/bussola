@@ -56,6 +56,16 @@
     .stat .v { font-size: 1.35rem; font-variant-numeric: tabular-nums; margin-top: .15rem; }
     .stat .u { font-size: .8rem; color: var(--muted); }
 
+    /* Theme variables, not literals: the page follows prefers-color-scheme, and
+       a hardcoded light panel renders white-on-white in dark mode. Caught by
+       looking at the rendered page rather than by any test. */
+    .utility { border: 1px solid var(--line); border-left: 4px solid var(--accent);
+               border-radius: 6px; padding: 0.9rem 1.1rem; margin: 1rem 0;
+               background: var(--card); color: var(--fg); }
+    .utility p { margin: 0.5rem 0 0; }
+    .fineprint { font-size: 0.85em; color: var(--muted); }
+    .curve-section { margin-top: 2.5rem; padding-top: 1.5rem;
+                     border-top: 1px solid var(--line); }
     .chart-box { border: 1px solid var(--line); border-radius: 6px; padding: 1rem;
                  background: var(--card); margin-bottom: 1.5rem; overflow-x: auto; }
     .rationale { border-left: 3px solid var(--accent); padding: .5rem 0 .5rem .9rem;
@@ -205,6 +215,42 @@
       {% endfor %}
     </div>
 
+    {% if utility and utility.has_reading %}
+      <div class="utility">
+        <strong>How much to trust this release</strong>
+        <p>
+          Across 7,000 simulated releases, a benchmark published at
+          <em>ε = {{ utility.epsilon|floatformat:"-2" }}</em> to a cohort of
+          <em>{{ utility.n }}</em> placed
+          {% with r=utility.correct_quartile_range %}
+            {% if utility.is_exact %}
+              <strong>{{ r.0|floatformat:1 }}%</strong>
+            {% elif utility.beyond_grid %}
+              <strong>at least {{ r.0|floatformat:1 }}%</strong>
+            {% else %}
+              <strong>{{ r.0|floatformat:1 }}%–{{ r.1|floatformat:1 }}%</strong>
+            {% endif %}
+          {% endwith %}
+          of contributors in the correct quartile.
+          {% if utility.lower %}
+            In the same trials, {{ utility.lower.unusable_percent|floatformat:1 }}% of
+            releases came back with their quartiles out of order.
+          {% endif %}
+        </p>
+        <p class="fineprint">
+          {% if not utility.is_exact %}
+            This release sits between measured points on the grid, so the range is
+            bracketed by the two nearest cells rather than interpolated — every
+            figure above was observed in 200 real trials.
+          {% endif %}
+          These are results from simulation on synthetic cohorts
+          (<code>evaluation/RESULTS.md</code>), not a statement about this
+          particular release. They say what releases at these parameters did, not
+          what this one did.
+        </p>
+      </div>
+    {% endif %}
+
     <div class="chart-box">
       <canvas id="dist" height="120"
               data-labels="{% for s in statistics %}{{ s.statistic|upper }}{% if not forloop.last %}|{% endif %}{% endfor %}"
@@ -299,7 +345,84 @@
     </div>
   {% endif %}
 
+  {% if curve %}
+    <div class="curve-section">
+      <h2>The privacy–utility trade-off, measured</h2>
+      <p>
+        Every benchmark on this page is a trade: more privacy means more noise
+        means a less reliable answer. This is that trade measured rather than
+        asserted — 7,000 differentially private releases through this system's own
+        mechanism, scored against known ground truth on synthetic cohorts.
+      </p>
+      <div class="chart-box">
+        <canvas id="curve" height="150"></canvas>
+      </div>
+      <p class="fineprint">
+        Exactly three points clear 90% correct with no unusable release in 200
+        trials — ε=8 at N=25, ε=4 at N=50, and ε=2 at N=100. Each multiplies to
+        200: <strong>to halve the privacy cost, double the cohort.</strong>
+        Cohort size dominates epsilon everywhere on this chart. At N=5 the line
+        barely rises at all — eighty times the privacy budget buys fourteen
+        points, because at that size the release collapses every contributor into
+        one quartile rather than misplacing a few. Method and limits:
+        <code>evaluation/RESULTS.md</code>.
+      </p>
+    </div>
+  {% endif %}
+
 </div>
+
+{{ curve|json_script:"curve-data" }}
+
+<script>
+  (function () {
+    const holder = document.getElementById('curve-data');
+    if (!holder || typeof Chart === 'undefined') return;
+    const series = JSON.parse(holder.textContent);
+    if (!series.length) return;
+
+    // Cohort size is the variable that matters most, so it gets the colour
+    // ramp: darker means more contributors.
+    const colours = ['#d68a8a', '#d0a86a', '#9fbf7a', '#4f8fc0', '#1f5f8b'];
+
+    new Chart(document.getElementById('curve'), {
+      type: 'line',
+      data: {
+        labels: series[0].epsilons,
+        datasets: series.map((s, i) => ({
+          label: s.n + ' contributors',
+          data: s.correct,
+          borderColor: colours[i % colours.length],
+          backgroundColor: colours[i % colours.length],
+          tension: 0.25,
+          pointRadius: 3
+        }))
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              afterLabel: (ctx) => {
+                const s = series[ctx.datasetIndex];
+                return s.unusable[ctx.dataIndex] + '% of releases unusable';
+              }
+            }
+          }
+        },
+        scales: {
+          x: { title: { display: true, text: 'ε per release (lower = more privacy)' } },
+          y: {
+            min: 0, max: 100,
+            title: { display: true, text: 'contributors placed in the correct quartile (%)' }
+          }
+        }
+      }
+    });
+  })();
+</script>
 
 <script>
   (function () {
