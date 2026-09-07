@@ -40,6 +40,22 @@ class SweepCell:
     unusable_rate: float
     rel_err_median_p50: float
     rel_err_median_p90: float
+    rel_err_q25_p90: float
+    rel_err_q75_p90: float
+
+    def p90_for(self, statistic: str) -> float | None:
+        """The 90th-percentile relative error measured for one statistic.
+
+        None for anything the sweep did not measure. A statistic without a
+        measured error distribution must show no band rather than borrow another
+        statistic's — the quartiles do not have the same error, and q25 is
+        consistently the worst of the three.
+        """
+        return {
+            "q25": self.rel_err_q25_p90,
+            "median": self.rel_err_median_p90,
+            "q75": self.rel_err_q75_p90,
+        }.get(statistic)
 
     @property
     def correct_percent(self) -> float:
@@ -76,6 +92,8 @@ def sweep_cells() -> tuple[SweepCell, ...]:
                 unusable_rate=float(row["unusable_rate"]),
                 rel_err_median_p50=float(row["rel_err_median_p50"]),
                 rel_err_median_p90=float(row["rel_err_median_p90"]),
+                rel_err_q25_p90=float(row["rel_err_q25_p90"]),
+                rel_err_q75_p90=float(row["rel_err_q75_p90"]),
             )
             for row in csv.DictReader(fh)
         )
@@ -195,3 +213,127 @@ def curve_series() -> list[dict]:
             }
         )
     return series
+
+
+# --- accuracy bands by simulation (S3-2 / S2-5) -----------------------------
+#
+# Sprint 2 shipped no interval, for a stated reason: OpenDP's summarize()
+# returns none for the exponential mechanism, and a fabricated interval is read
+# as a promise. The sweep is the simulation that was owed.
+#
+# THE INVERSION IS THE WHOLE PROBLEM, and getting it wrong is the easy mistake.
+# The sweep measures  |noisy - true| / true  -- error around a true value that
+# the experiment knows. An operator has the opposite: a noisy value in hand and
+# a true value they will never see. So the band must be inverted, not mirrored:
+#
+#     |noisy - true| <= e * true
+#       =>  true(1 - e) <= noisy <= true(1 + e)
+#       =>  noisy / (1 + e) <= true <= noisy / (1 - e)
+#
+# Which is ASYMMETRIC about the released value, and unbounded above once
+# e >= 1. Writing `released * (1 +/- e)` would look right, be symmetric, be
+# simpler, and answer a question nobody asked: the spread of noisy values around
+# a known truth, which the operator already has.
+
+
+@dataclass(frozen=True)
+class AccuracyBand:
+    """Where the true value plausibly sits, given the released one.
+
+    `lower` and `upper` bracket the TRUE value, clamped to the metric's declared
+    bounds. `spans_declared_range` marks the case where the band has widened to
+    the whole catalogue range -- the release constrains the answer not at all,
+    and saying that plainly beats printing two numbers that look like a finding.
+    """
+
+    statistic: str
+    released: Decimal
+    relative_error: float
+    lower: Decimal
+    upper: Decimal
+    clamped: bool
+    spans_declared_range: bool
+
+    @property
+    def percent(self) -> float:
+        return self.relative_error * 100
+
+
+def accuracy_band(
+    *,
+    statistic: str,
+    released: Decimal,
+    relative_error: float,
+    lower_bound: Decimal,
+    upper_bound: Decimal,
+) -> AccuracyBand:
+    """Invert a measured relative error into a band on the TRUE value.
+
+    CLAMPED TO THE METRIC'S DECLARED BOUNDS, and that is a correctness fix
+    rather than cosmetics. Inverting a 71% error on a released q75 of 3,800
+    gives an upper limit of 12,996 MJ/t -- against a declared ceiling of 7,100.
+    A submission above that ceiling is rejected at ingest rather than clamped
+    (ingest.views), so the true quantile cannot be there, and a band claiming it
+    might be would be asserting something the model already excludes.
+
+    The bounds are public domain knowledge, already displayed beside every
+    benchmark and already the basis of the mechanism's candidate grid. Using
+    them here narrows the band with information the reader already has, which is
+    the opposite of fabricating one.
+
+    When the measured error reaches 100% the upper limit is infinite before
+    clamping; the band then becomes the entire declared range, and
+    `spans_declared_range` says so.
+    """
+    if relative_error < 0:
+        raise ValueError("Relative error cannot be negative.")
+    if upper_bound <= lower_bound:
+        raise ValueError("Upper bound must exceed lower bound.")
+
+    error = Decimal(str(relative_error))
+    raw_lower = released / (Decimal(1) + error)
+    # true <= noisy / (1 - e) has no finite solution once e >= 1.
+    raw_upper = None if error >= 1 else released / (Decimal(1) - error)
+
+    lower = max(raw_lower, lower_bound)
+    upper = upper_bound if raw_upper is None else min(raw_upper, upper_bound)
+
+    clamped = raw_lower < lower_bound or raw_upper is None or raw_upper > upper_bound
+    declared_width = upper_bound - lower_bound
+    return AccuracyBand(
+        statistic=statistic,
+        released=released,
+        relative_error=relative_error,
+        lower=lower,
+        upper=upper,
+        clamped=clamped,
+        # 95% of the catalogue range is indistinguishable from all of it for a
+        # reader deciding whether to act on the number.
+        spans_declared_range=(upper - lower) >= declared_width * Decimal("0.95"),
+    )
+
+
+def bands_for(statistics, reading: UtilityReading | None, metric=None) -> dict[str, AccuracyBand]:
+    """Band each released statistic, using the PESSIMISTIC bracket.
+
+    The wider of the two bracketing cells, deliberately. A band is a claim about
+    where the truth might be, and the failure that matters is a band too narrow
+    to contain it -- an operator reading a tight interval concludes the release
+    is precise. Too wide only costs confidence that was not earned.
+    """
+    if reading is None or reading.lower is None or metric is None:
+        return {}
+
+    bands = {}
+    for statistic in statistics:
+        p90 = reading.lower.p90_for(statistic.statistic)
+        if p90 is None:
+            continue
+        bands[statistic.statistic] = accuracy_band(
+            statistic=statistic.statistic,
+            released=statistic.value,
+            relative_error=p90,
+            lower_bound=metric.lower_bound,
+            upper_bound=metric.upper_bound,
+        )
+    return bands

@@ -167,15 +167,32 @@ def test_the_bounds_rationale_is_shown_next_to_the_benchmark(
     assert "Thermodynamic floor" in body
 
 
-def test_the_missing_accuracy_interval_is_explained_not_hidden(
+def test_the_accuracy_interval_says_where_it_came_from(
     client, collaboration, cohort, metric, period, published
 ):
-    """A blank column would read as an oversight. The page says why it is
-    empty, because a fabricated interval would be read as a promise."""
+    """Updated in Sprint 3, and the change is the point.
+
+    Sprint 2's version of this test asserted the column read "not available",
+    and explained why: OpenDP's summarize() returns no accuracy interval for the
+    exponential mechanism, and a fabricated one is read as a promise. That was
+    correct then. S3-2 supplies the simulation that was owed, so the column now
+    carries a measured band — but the claim being defended has not changed. It
+    was never "leave it blank"; it was "never show a number the system cannot
+    justify". The page must still say where the interval comes from, because a
+    band read as the mechanism's own accuracy would be the same false promise in
+    a different font.
+
+    This release is 8 contributors at ε=1, which floors to the sweep's N=5 cell —
+    where the measured q25 error is 105%. Above 100% the upper limit runs to
+    infinity, so the column refuses a number outright. A tiny cohort gets an
+    honest "no useful bound" rather than an arithmetically tidy interval, which
+    is the same refusal Sprint 2 made, now with a measurement behind it.
+    """
     body = view(client, collaboration, cohort, metric, period).content.decode()
 
-    assert "not available" in body
+    assert "anywhere in the declared range" in body
     assert "exponential mechanism" in body
+    assert "comes from simulation, not from the mechanism" in body
 
 
 # --- the unpublished states ----------------------------------------------
@@ -321,3 +338,70 @@ def test_the_curve_is_shown_even_with_nothing_released(
     assert "The privacy–utility trade-off, measured" in body
     assert "curve-data" in body
     assert "double the cohort" in body
+
+
+# --- accuracy bands on the dashboard (S3-2) ---------------------------------
+
+
+def _release_with_quantiles(cohort, metric, period, n, epsilon):
+    from benchmarks.models import BenchmarkRelease, ReleasedStatistic
+
+    release = BenchmarkRelease.objects.create(
+        period=period, cohort=cohort, metric=metric,
+        n_contributors=n, epsilon_spent=Decimal(epsilon),
+    )
+    for statistic, value in (("q25", "3000"), ("median", "3400"), ("q75", "3800")):
+        ReleasedStatistic.objects.create(
+            release=release, statistic=statistic, mechanism="exponential",
+            value=Decimal(value), epsilon_spent=Decimal("0.333334"),
+        )
+    return release
+
+
+def test_the_dashboard_shows_a_band_around_each_published_value(
+    client, collaboration, cohort, metric, period
+):
+    """Sprint 2 shipped 'not available' here for a stated reason. The sweep is
+    the simulation that was owed, so the column now carries a measured band."""
+    _release_with_quantiles(cohort, metric, period, n=50, epsilon="1.000000")
+
+    body = client.get(
+        f"/?collaboration={collaboration.slug}&cohort={cohort.code}"
+        f"&metric={metric.code}&period={period.label}"
+    ).content.decode()
+
+    assert "Where the true value plausibly sits" in body
+    assert "measured" in body
+    assert "not available" not in body
+
+
+def test_the_band_is_labelled_as_simulation_not_as_the_mechanism_s_own(
+    client, collaboration, cohort, metric, period
+):
+    """The distinction Sprint 2 refused to blur: this is not an accuracy
+    interval the mechanism produced, and it must not be read as one."""
+    _release_with_quantiles(cohort, metric, period, n=50, epsilon="1.000000")
+
+    body = client.get(
+        f"/?collaboration={collaboration.slug}&cohort={cohort.code}"
+        f"&metric={metric.code}&period={period.label}"
+    ).content.decode()
+
+    assert "comes from simulation, not from the mechanism" in body
+    assert "returns no accuracy interval" in body
+
+
+def test_a_release_too_noisy_to_bound_says_so_rather_than_showing_a_number(
+    client, collaboration, cohort, metric, period
+):
+    """At ε = 0.1 the measured q25 error exceeds 100%, so the upper limit runs
+    to infinity. Clipping it to something finite would be the fabricated
+    interval this column exists to avoid."""
+    _release_with_quantiles(cohort, metric, period, n=25, epsilon="0.100000")
+
+    body = client.get(
+        f"/?collaboration={collaboration.slug}&cohort={cohort.code}"
+        f"&metric={metric.code}&period={period.label}"
+    ).content.decode()
+
+    assert "anywhere in the declared range" in body

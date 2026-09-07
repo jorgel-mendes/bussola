@@ -64,6 +64,7 @@
                background: var(--card); color: var(--fg); }
     .utility p { margin: 0.5rem 0 0; }
     .fineprint { font-size: 0.85em; color: var(--muted); }
+    .muted { color: var(--muted); font-size: .85em; }
     .curve-section { margin-top: 2.5rem; padding-top: 1.5rem;
                      border-top: 1px solid var(--line); }
     .chart-box { border: 1px solid var(--line); border-radius: 6px; padding: 1rem;
@@ -262,7 +263,8 @@
       <thead>
         <tr>
           <th>Statistic</th><th>Released value</th><th>Mechanism</th>
-          <th class="num">ε spent</th><th class="num">Scale</th><th>95% interval</th>
+          <th class="num">ε spent</th><th class="num">Scale</th>
+          <th>Where the true value plausibly sits</th>
         </tr>
       </thead>
       <tbody>
@@ -274,8 +276,14 @@
             <td class="num">{{ s.epsilon_spent }}</td>
             <td class="num">{{ s.scale|default:"—" }}</td>
             <td>
-              {% if s.has_accuracy_interval %}
-                {{ s.accuracy_lower|floatformat:1 }} – {{ s.accuracy_upper|floatformat:1 }}
+              {% if s.band.spans_declared_range %}
+                <span class="muted">anywhere in the declared range — at these
+                parameters the simulated error reached
+                {{ s.band.percent|floatformat:0 }}%, so this release constrains
+                the true value hardly at all</span>
+              {% elif s.band %}
+                {{ s.band.lower|floatformat:1 }} – {{ s.band.upper|floatformat:1 }}
+                <span class="muted">({{ s.band.percent|floatformat:0 }}% measured{% if s.band.clamped %}, limited by the declared bounds{% endif %})</span>
               {% else %}
                 not available
               {% endif %}
@@ -287,12 +295,25 @@
 
     <div class="caveat">
       <p>
-        <strong>No confidence interval is shown, and that is deliberate.</strong>
+        <strong>The interval comes from simulation, not from the mechanism.</strong>
         OpenDP&rsquo;s <code>summarize()</code> returns no accuracy interval for the
         exponential mechanism used for quantiles — only the mechanism scale, shown
-        above. The interval has to be derived by simulation, which is scheduled work,
-        not something to estimate here. A displayed interval is read as a promise, so
-        a fabricated one would be worse than none.
+        above. So the band is measured instead: across 200 releases at this
+        ε and cohort size on synthetic data with known ground truth, 9 in 10
+        landed within the error shown.
+      </p>
+      <p>
+        It brackets <em>the true value</em>, given the released one — which is why
+        it is not centred on the figure in the second column. The measurement runs
+        the other way round (error around a known truth), and inverting it is
+        asymmetric: a release 20% out could have come from a true value 25% above
+        it or 17% below. The band is then held inside the metric&rsquo;s declared
+        bounds, shown below — a submission outside them is rejected at ingest
+        rather than clamped, so the true value cannot be there, and a band
+        reaching past them would assert something already ruled out. Where the
+        measured error reaches 100% the band widens to the whole declared range,
+        and the column says that plainly rather than printing two numbers that
+        look like a finding. Method: <code>evaluation/RESULTS.md</code>.
       </p>
     </div>
 
