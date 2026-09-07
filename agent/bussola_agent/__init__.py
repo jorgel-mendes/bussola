@@ -1,4 +1,4 @@
-"""Bussola plant-side agent.
+"""Bussola contributor-side agent.
 
 Installable without Django. That is what makes the multi-party architecture
 real rather than cosmetic: the agent is a genuinely separate program, with its

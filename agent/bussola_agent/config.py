@@ -1,7 +1,7 @@
 """Agent configuration.
 
 Read from environment variables so the agent runs the same way under
-docker-compose, systemd, or a cron entry on a plant machine.
+docker-compose, systemd, or a cron entry on a contributor's machine.
 """
 
 from __future__ import annotations
