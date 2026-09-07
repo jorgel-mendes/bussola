@@ -127,11 +127,25 @@ The N = 6 result was not a fluke of one seeded dataset.
 
 ## 8. What this changes
 
-1. **The demo's release parameters.** The seeded consortium is 50/50/6 and the
-   demo releases at ε = 1.0, which the table puts at 66.9% correct for the
-   N = 50 cohorts. The demo should either release at a higher ε or say the
-   number out loud — showing a benchmark while knowing a third of members are
-   misplaced is the failure mode this project exists to argue against.
+1. **The demo's release parameters — decided: ε = 1.0 stays, and the number is
+   said out loud.** The seeded consortium is 50/50/6, and the table puts ε = 1.0
+   at 66.9% correct for the N = 50 cohorts. Tuning ε upward until the demo
+   looked good would have been the easy call and the wrong one:
+
+   - **ε = 1.0 is the value the literature treats as standard**, so it is the
+     value a reader can compare against. A demo at ε = 4 answers a question
+     nobody asked.
+   - **The build is a work in progress and should show that.** It works well at
+     larger cohorts and looser privacy, and the point of running the sweep was
+     to find where it stops working — not to pick parameters that hide it.
+   - **The gap is the future work**, stated with a number attached rather than
+     as a gesture: at ε = 1, quartiles of this quality need roughly 200
+     contributors (§5), and closing that gap is a better accountant (zCDP) and a
+     smarter mechanism, not a bigger epsilon.
+
+   Showing a benchmark while knowing a third of members are misplaced would be
+   the failure mode this project argues against. Showing it **and saying so** is
+   the opposite: it is the product's own thesis applied to the product.
 2. **`S3-2` accuracy intervals** now have their source. The exponential
    mechanism returns no interval from `summarize()`; these per-cell error
    distributions are the simulation that replaces it.
