@@ -241,3 +241,83 @@ def test_statistics_are_shown_in_reading_order_not_alphabetical(
     positions = [stats_block.index(name) for name in ("Q25", "MEDIAN", "Q75")]
 
     assert positions == sorted(positions), "quartiles are not in reading order"
+
+
+# --- the privacy-utility reading on the dashboard (S3-3) -------------------
+
+
+def test_dashboard_shows_what_the_sweep_measured_for_this_release(
+    client, collaboration, cohort, metric, period
+):
+    """The number an operator needs is the one for THEIR epsilon and cohort.
+
+    A generic curve is a decoration; this is the reading that makes it
+    actionable, and it must appear beside the release it describes.
+    """
+    from benchmarks.models import BenchmarkRelease, ReleasedStatistic
+
+    release = BenchmarkRelease.objects.create(
+        period=period, cohort=cohort, metric=metric,
+        n_contributors=50, epsilon_spent=Decimal("1.000000"),
+    )
+    for statistic, value in (("q25", "3000"), ("median", "3400"), ("q75", "3800")):
+        ReleasedStatistic.objects.create(
+            release=release, statistic=statistic, mechanism="exponential",
+            value=Decimal(value), epsilon_spent=Decimal("0.333334"),
+        )
+
+    body = client.get(
+        f"/?collaboration={collaboration.slug}&cohort={cohort.code}"
+        f"&metric={metric.code}&period={period.label}"
+    ).content.decode()
+
+    assert "How much to trust this release" in body
+    # ε=1.0 at N=50 is an exact grid point: 66.9%.
+    assert "66.9%" in body
+    assert "5.0% of" in body  # unusable rate at that cell
+
+
+def test_the_reading_says_it_comes_from_simulation(
+    client, collaboration, cohort, metric, period
+):
+    """It must not read as a claim about this particular release.
+
+    The sweep says what releases at these parameters did across 200 trials. A
+    member who read it as "this benchmark is 66.9% accurate" would be drawing a
+    conclusion the experiment does not support.
+    """
+    from benchmarks.models import BenchmarkRelease, ReleasedStatistic
+
+    release = BenchmarkRelease.objects.create(
+        period=period, cohort=cohort, metric=metric,
+        n_contributors=50, epsilon_spent=Decimal("1.000000"),
+    )
+    ReleasedStatistic.objects.create(
+        release=release, statistic="median", mechanism="exponential",
+        value=Decimal("3400"), epsilon_spent=Decimal("1.000000"),
+    )
+
+    body = client.get(
+        f"/?collaboration={collaboration.slug}&cohort={cohort.code}"
+        f"&metric={metric.code}&period={period.label}"
+    ).content.decode()
+
+    assert "simulation on synthetic cohorts" in body
+    # Asserted without spanning a line break: the template wraps this sentence,
+    # so the rendered HTML has a newline between "not" and "what".
+    assert "what this one did" in body
+    assert "not a statement about this" in body
+
+
+def test_the_curve_is_shown_even_with_nothing_released(
+    client, collaboration, cohort, metric, period
+):
+    """The trade-off is the product's argument, not a footnote to one release.
+
+    It is what a prospective member needs before there is anything to look at.
+    """
+    body = client.get(f"/?collaboration={collaboration.slug}").content.decode()
+
+    assert "The privacy–utility trade-off, measured" in body
+    assert "curve-data" in body
+    assert "double the cohort" in body

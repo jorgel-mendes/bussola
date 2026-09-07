@@ -375,6 +375,76 @@ def summarize_cell(results: list[TrialResult]) -> CellSummary:
     )
 
 
+#: Percentiles reported for the relative-error distribution. p90 is the one the
+#: dashboard shows: "9 releases in 10 landed within this" is a claim an operator
+#: can act on, where a median error tells them nothing about the bad half.
+ERROR_PERCENTILES = (50, 90)
+
+SUMMARY_COLUMNS = [
+    "epsilon",
+    "n",
+    "trials",
+    "correct_quartile_rate",
+    "unusable_rate",
+    "rel_err_median_p50",
+    "rel_err_median_p90",
+    "rel_err_q25_p90",
+    "rel_err_q75_p90",
+]
+
+
+def _percentile(values: list[float], pct: int) -> float:
+    """Nearest-rank percentile. No interpolation between observed trials --
+    a reported error should be one that actually happened."""
+    if not values:
+        raise ValueError("No values to take a percentile of.")
+    ordered = sorted(values)
+    rank = max(1, math.ceil(pct / 100 * len(ordered)))
+    return ordered[rank - 1]
+
+
+def summary_row(results: list[TrialResult]) -> dict:
+    """One row of the committed summary the dashboard reads.
+
+    The raw per-trial CSV is a build artifact and is gitignored; this 35-row
+    digest is checked in, because the dashboard must be able to say what the
+    sweep found without the 1.4 MB of trials being in the repo.
+    """
+    summary = summarize_cell(results)
+    return {
+        "epsilon": summary.epsilon,
+        "n": summary.n,
+        "trials": summary.trials,
+        "correct_quartile_rate": round(summary.correct_quartile_rate, 6),
+        "unusable_rate": round(summary.unusable_rate, 6),
+        "rel_err_median_p50": round(
+            _percentile([r.rel_err_median for r in results], 50), 6
+        ),
+        "rel_err_median_p90": round(
+            _percentile([r.rel_err_median for r in results], 90), 6
+        ),
+        "rel_err_q25_p90": round(_percentile([r.rel_err_q25 for r in results], 90), 6),
+        "rel_err_q75_p90": round(_percentile([r.rel_err_q75 for r in results], 90), 6),
+    }
+
+
+def write_summary_csv(results: list[TrialResult], path: Path) -> Path:
+    """Write the committed digest: one row per (epsilon, N) cell."""
+    cells: dict[tuple[str, int], list[TrialResult]] = {}
+    for result in results:
+        cells.setdefault((result.epsilon, result.n), []).append(result)
+
+    rows = [summary_row(cell) for cell in cells.values()]
+    rows.sort(key=lambda r: (float(r["epsilon"]), r["n"]))
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=SUMMARY_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+    return path
+
+
 def summarize(results: list[TrialResult]) -> list[CellSummary]:
     cells: dict[tuple[str, int], list[TrialResult]] = {}
     for result in results:
