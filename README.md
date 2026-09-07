@@ -12,6 +12,7 @@ Quantic MSSE Capstone · Jorge Luis dos Santos Mendes
 | **Design & testing doc** | [`docs/DESIGN.md`](docs/DESIGN.md) ✅ |
 | **Sprint reviews** | [Sprint 1](docs/SPRINT-1-REVIEW.md) ✅ · [Sprint 2](docs/SPRINT-2-REVIEW.md) ✅ |
 | **Demo recording** | One per sprint; the final 15–20 minute video is an edit of the three |
+| **Where this goes next** | [`docs/FUTURE-BACKLOG.md`](docs/FUTURE-BACKLOG.md) — including what a 2–5 company deployment needs instead |
 
 ---
 
