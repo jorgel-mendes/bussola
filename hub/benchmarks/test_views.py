@@ -182,15 +182,25 @@ def test_the_accuracy_interval_says_where_it_came_from(
     band read as the mechanism's own accuracy would be the same false promise in
     a different font.
 
-    This release is 8 contributors at ε=1, which floors to the sweep's N=5 cell —
-    where the measured q25 error is 105%. Above 100% the upper limit runs to
-    infinity, so the column refuses a number outright. A tiny cohort gets an
-    honest "no useful bound" rather than an arithmetically tidy interval, which
-    is the same refusal Sprint 2 made, now with a measurement behind it.
+    ONLY THE PROVENANCE IS ASSERTED HERE, and that is deliberate.
+
+    The first version of this test also asserted which band branch rendered, and
+    it was FLAKY — 2 failures in 6 local runs, and it took down CI on main after
+    passing both locally and on its own pull request.
+
+    The `published` fixture runs a real DP release, so the released q25 is
+    random. The band's lower limit is max(released / 2.052, 1760), and it clamps
+    to the metric floor only while the released value is under about 4,160 —
+    which decides whether the band spans the declared range or shows numbers.
+    Over a six-contributor cohort with bounds of 1,760–7,100 the release lands
+    on either side of that roughly a third of the time.
+
+    Both branches ARE tested, deterministically, against constructed releases
+    further down this file. A test whose fixture is random must assert only what
+    is invariant under that randomness, and the provenance text is.
     """
     body = view(client, collaboration, cohort, metric, period).content.decode()
 
-    assert "anywhere in the declared range" in body
     assert "exponential mechanism" in body
     assert "comes from simulation, not from the mechanism" in body
 
