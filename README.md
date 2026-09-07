@@ -10,8 +10,9 @@ Quantic MSSE Capstone · Jorge Luis dos Santos Mendes
 | **Deployed version** | <https://bussola-hub.onrender.com> ✅ live |
 | **Task board** (Trello) | [Bussola — MSSE Capstone](https://trello.com/b/ZMEqk4Up/bussola-msse-capstone) ✅ public |
 | **Design & testing doc** | [`docs/DESIGN.md`](docs/DESIGN.md) ✅ |
-| **Sprint reviews** | [Sprint 1](docs/SPRINT-1-REVIEW.md) ✅ · [Sprint 2](docs/SPRINT-2-REVIEW.md) ✅ |
-| **Demo recording** | One per sprint; the final 15–20 minute video is an edit of the three |
+| **Sprint reviews** | [Sprint 1](docs/SPRINT-1-REVIEW.md) ✅ · [Sprint 2](docs/SPRINT-2-REVIEW.md) ✅ · [Sprint 3](docs/SPRINT-3-REVIEW.md) ✅ |
+| **Demo recording** | One per sprint ✅; the final 15–20 minute video is an edit of the three |
+| **Evaluation** | [`evaluation/RESULTS.md`](evaluation/RESULTS.md) — 7,000 DP releases, measured ✅ |
 
 ---
 
@@ -252,7 +253,7 @@ uv run pytest --cov --cov-report=term-missing
 uv run ruff check .
 ```
 
-**280 tests, 83% coverage**, zero skips on Postgres. Several defend **privacy
+**412 tests, 93% coverage**, zero skips on Postgres. Several defend **privacy
 invariants** rather than mere correctness, and say so in their docstrings —
 notably submission idempotency (a contributor that submits twice would double its
 weight and break the sensitivity bound the guarantee rests on),
@@ -269,8 +270,14 @@ vacuously. `hub/test_postgres_guard.py` fails the build if they skip instead of
 running — a silent skip would reduce the project's most important test to a green
 tick that proves nothing.
 
-The suite takes ~11 minutes on CI, most of it OpenDP releases in the mechanism
+The suite takes ~15 minutes on CI, most of it OpenDP releases in the mechanism
 tests. That cost is deliberate and was accepted rather than trimmed.
+
+The **privacy–utility sweep** runs in its own workflow, not in the main suite:
+7 epsilons × 5 cohort sizes × 200 trials is roughly two and a half hours, and
+putting every push behind it would be indefensible. Its *fast* tests — the
+measurement functions the published figures come from — run on every push,
+because a harness whose tests never run is a harness nobody trusts.
 
 ---
 
@@ -300,9 +307,22 @@ below the contributor threshold · release and ledger in one transaction ·
 per-contributor value list deleted · deployed to Render. Reviewed in
 [`docs/SPRINT-2-REVIEW.md`](docs/SPRINT-2-REVIEW.md).
 
-**Sprint 3 — the evidence (in progress).** The privacy–utility sweep · accuracy
-intervals by simulation · the privacy–utility curve in the dashboard ·
-contributor self-service position view · ledger CSV export for the auditor.
+**Sprint 3 — the evidence.** The privacy–utility sweep (7,000 releases) ·
+accuracy intervals by simulation · the curve in the dashboard, with a reading
+for each release · contributor self-service position view · ledger CSV export
+for the auditor. Reviewed in [`docs/SPRINT-3-REVIEW.md`](docs/SPRINT-3-REVIEW.md).
+
+**What the evidence says.** Three points on the grid clear 90% correct with no
+unusable release: ε=8 at 25 contributors, ε=4 at 50, ε=2 at 100. Each multiplies
+to 200 — **to halve the privacy cost, double the cohort.** And epsilon cannot buy
+its way out of a small cohort: at N=5 the correct-quartile rate moves only from
+36.8% at ε=0.1 to 50.8% at ε=8.
+
+The seeded demo publishes at **ε=1.0**, where a 50-contributor cohort places
+66.9% of its members correctly — and the dashboard says so beside the benchmark.
+That number was not tuned upward to make the demo look better; ε=1.0 is what the
+literature treats as standard, and the gap is the future work, stated with a
+figure attached.
 
 ### Deliberately not built
 

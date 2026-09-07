@@ -3,7 +3,8 @@
 **Board:** [Bussola — MSSE Capstone](https://trello.com/b/ZMEqk4Up/bussola-msse-capstone)
 **Visibility:** public ✅ (verified via `api.trello.com/1/boards/ZMEqk4Up` —
 `permissionLevel: "public"`; `quantic-grader` can open it without an invite)
-**Status:** 37 cards created · lists in place · checklists pending
+**Status:** closed at end of Sprint 3 — every card in Done, including the two
+cut deliberately (see §8).
 
 This file mirrors the board so the two do not drift. Update it when the board
 changes.
@@ -192,7 +193,7 @@ Added during Sprint 2 day 3. Recorded here rather than done, because the sprint
 is one week and this is the part that can be strengthened later without
 invalidating anything built on it.
 
-### S3-8 — Deepen the mechanism calibration tests · `sprint-3`
+### S3-9 — Deepen the mechanism calibration tests · `sprint-3`
 
 `hub/privacy/test_mechanisms.py` currently proves the *direction* of the
 privacy--utility relationship: repeated releases of identical data disagree,
@@ -251,3 +252,46 @@ S2-12  remove per-contributor list  direct disclosure
   evidenced rather than asserted.
 - If a card is abandoned, move it to Done with a comment saying why it was
   dropped. Silent deletion looks like a board tidied for marking.
+
+
+---
+
+## 8. Final board state — end of Sprint 3
+
+The board is a graded artifact, so this section records where every card ended
+and why, rather than leaving Done to be read as "all went to plan".
+
+### Sprint 3, delivered
+
+```
+S3-1  Show a contributor its position against the cohort distribution
+S3-2  Show confidence intervals on every published value
+S3-3  Put the privacy-utility curve in the dashboard
+S3-4  Export the epsilon ledger as CSV
+S3-5  Add a dry-run mode note to the operator guide
+S3-7  Deploy to Render and add the URL to README        (closed in Sprint 2)
+S3-8  Record the final 15-20 minute demo
+S3-10 Check the names in the product that still refer to plants
+S2-5  Show an accuracy estimate before releasing        (carried from Sprint 2)
+S2-19 Record the Sprint 2 demo                          (carried from Sprint 2)
+```
+
+### Cut, and moved to Done with the reason on the card
+
+Per §7: a card abandoned silently looks like a board tidied for marking.
+
+| Card | Why |
+|---|---|
+| `S3-6` Compare a contributor's trend across periods | Needs releases across multiple periods, which the demo does not have and the sweep does not measure. It adds a surface, not evidence — and Sprint 3's job was evidence |
+| `S3-9` Deepen the mechanism calibration tests | ~450 ms per release and no speedup from context reuse. Ten thousand trials per mechanism is a separate CI job. The cheap directional tests already catch the catastrophic failure, verified by planting it; distribution-matching catches a subtler one and is honest future work |
+| `S2-11` Write statistical calibration tests for each mechanism | Superseded. Partially delivered in Sprint 2 (directional) and the rest is `S3-9` |
+
+### Retro actions, tracked as work rather than as good intentions
+
+`B2` — tests for `release_period` and `load_submissions` — was done in Sprint 3
+and is the only Sprint 2 retro action that needed code. Both commands were at
+**0%** coverage, not the "partial" the Sprint 2 review claimed; they are at 97%.
+
+The others (`B1` and `B3`–`B6`) are practices, and §5 of
+[SPRINT-3-REVIEW.md](SPRINT-3-REVIEW.md) records where each one paid out or
+failed to.
