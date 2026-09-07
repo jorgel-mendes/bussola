@@ -21,7 +21,7 @@ from __future__ import annotations
 from django.shortcuts import get_object_or_404, render
 
 from benchmarks.models import BenchmarkRelease, display_sorted
-from benchmarks.utility import curve_series, reading_for
+from benchmarks.utility import bands_for, curve_series, reading_for
 from catalog.models import MetricDefinition
 from collaborations.models import Cohort, Collaboration
 from ingest.models import ReportingPeriod
@@ -51,6 +51,7 @@ def benchmark_index(request):
     cohort = metric = period = None
     n_submissions = 0
     utility = None
+    bands = {}
 
     if selected_cohort and selected_metric and selected_period:
         cohort = get_object_or_404(Cohort, code=selected_cohort, collaboration=collaboration)
@@ -77,6 +78,14 @@ def benchmark_index(request):
             utility = reading_for(
                 epsilon=release.epsilon_spent, n=release.n_contributors
             )
+            # S3-2 / S2-5. The accuracy interval Sprint 2 could not ship,
+            # derived by simulation now that the simulation exists. Attached to
+            # each statistic rather than passed as a dict, because Django
+            # templates cannot look a dict up by a variable key without a custom
+            # filter, and one template filter is a worse trade than one loop.
+            bands = bands_for(statistics, utility, metric)
+            for statistic in statistics:
+                statistic.band = bands.get(statistic.statistic)
         else:
             # Contributor count only, so an unreleased cell can explain itself.
             # Membership is public (DESIGN.md section 2.2), so this leaks
@@ -106,6 +115,7 @@ def benchmark_index(request):
             "n_submissions": n_submissions,
             "min_contributors": collaboration.effective_min_contributors,
             "utility": utility,
+            "bands": bands,
             "curve": curve_series(),
         },
     )
