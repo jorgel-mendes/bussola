@@ -114,14 +114,58 @@ def cell_at(epsilon: Decimal, n: int) -> SweepCell | None:
     return None
 
 
+#: A release's epsilon is charged at the ledger's resolution, rounding UP, so
+#: three quantiles at a requested ε=1.0 cost 3 × 0.333334 = 1.000002. That
+#: overshoot is deliberate and correct — the charge must never be less than the
+#: spend — but it lands the release a hair ABOVE the ε=1.0 grid point, which
+#: made the optimistic bracket come from the ε=2.0 cell: DOUBLE the privacy
+#: actually spent, reported as what this release might have achieved.
+#:
+#: Found by rehearsing the demo, not by a test: the dashboard read
+#: "47.6%–85.2%" for a release that is ε=1 in every meaningful sense.
+#:
+#: 0.1% is far above any rounding overshoot (0.0002% here) and far below the
+#: gap between grid points (the tightest is 0.1 to 0.25, 150%), so it cannot
+#: snap a release onto a cell it does not belong to.
+GRID_TOLERANCE = Decimal("0.001")
+
+
+def _snapped(value, grid: list):
+    """The grid point `value` is within tolerance of, or None.
+
+    Relative, not absolute, because the grid spans two orders of magnitude.
+    """
+    for point in grid:
+        if point == 0:
+            continue
+        if abs(Decimal(str(value)) - Decimal(str(point))) / Decimal(str(point)) <= GRID_TOLERANCE:
+            return point
+    return None
+
+
 def _floor(value, grid: list):
-    """Largest grid point at or below `value`, or None if `value` is below all."""
+    """Largest grid point at or below `value`, or None if `value` is below all.
+
+    A value within `GRID_TOLERANCE` of a grid point counts as being ON it, so a
+    release does not get bracketed against a cell it only reaches by rounding.
+    """
+    snapped = _snapped(value, grid)
+    if snapped is not None:
+        return snapped
     below = [g for g in grid if g <= value]
     return max(below) if below else None
 
 
 def _ceil(value, grid: list):
-    """Smallest grid point at or above `value`, or None if `value` is above all."""
+    """Smallest grid point at or above `value`, or None if `value` is above all.
+
+    Snaps for the same reason `_floor` does — and this is the direction that
+    mattered, because the un-snapped ceiling was reporting a release's best case
+    from a cell at twice its epsilon.
+    """
+    snapped = _snapped(value, grid)
+    if snapped is not None:
+        return snapped
     above = [g for g in grid if g >= value]
     return min(above) if above else None
 

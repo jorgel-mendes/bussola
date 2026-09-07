@@ -303,3 +303,56 @@ def test_inverted_metric_bounds_are_refused():
             statistic="median", released=Decimal("100"), relative_error=0.1,
             lower_bound=Decimal("7100"), upper_bound=Decimal("1760"),
         )
+
+
+# --- grid snapping ----------------------------------------------------------
+#
+# Found by rehearsing the demo, not by a test. A release at a requested ε=1.0 is
+# charged 3 × 0.333334 = 1.000002, because epsilon is quantised at the ledger's
+# resolution and rounded UP so the charge is never less than the spend. That
+# overshoot put the release just above the ε=1.0 grid point, so the optimistic
+# bracket came from the ε=2.0 cell — twice the privacy actually spent, presented
+# as what this release might have achieved.
+
+
+def test_a_release_at_the_charged_epsilon_reads_as_the_grid_point():
+    """1.000002 is ε=1 in every sense that matters to a reader.
+
+    Before snapping, the dashboard read "47.6%–85.2%" for this release: the top
+    of that range is the ε=2.0 cell, at double the privacy cost.
+    """
+    reading = reading_for(epsilon=Decimal("1.000002"), n=50)
+
+    assert reading.is_exact
+    low, high = reading.correct_quartile_range
+    assert low == high == pytest.approx(66.9, abs=0.05)
+
+
+def test_snapping_does_not_reach_a_cell_the_release_does_not_belong_to():
+    """The tolerance must be far tighter than the gaps in the grid.
+
+    ε=1.1 is genuinely between 1.0 and 2.0 and must still bracket, or snapping
+    would be quietly rounding releases onto whichever cell flatters them.
+    """
+    reading = reading_for(epsilon=Decimal("1.1"), n=50)
+
+    assert not reading.is_exact
+    assert reading.lower.epsilon == Decimal("1.0")
+    assert reading.upper.epsilon == Decimal("2.0")
+
+
+def test_the_charged_epsilon_still_brackets_on_cohort_size():
+    """Snapping fixes epsilon only. 47 contributors is genuinely between the
+    N=25 and N=50 cells and must keep reporting a range."""
+    reading = reading_for(epsilon=Decimal("1.000002"), n=47)
+
+    low, high = reading.correct_quartile_range
+    assert low == pytest.approx(47.6, abs=0.05)
+    assert high == pytest.approx(66.9, abs=0.05)
+
+
+def test_snapping_is_relative_so_it_works_across_the_whole_grid():
+    """The grid spans 0.1 to 8.0. An absolute tolerance would swallow the low
+    end whole and do nothing at the high end."""
+    assert reading_for(epsilon=Decimal("0.100002"), n=50).is_exact
+    assert reading_for(epsilon=Decimal("8.000016"), n=50).is_exact
