@@ -1,8 +1,8 @@
 """Local aggregate computation.
 
 This is the whole point of the agent: raw per-record data never leaves the
-plant. Only the aggregate defined here is transmitted. Everything in this module
-runs on the plant's own machine, against the plant's own file.
+contributor. Only the aggregate defined here is transmitted. Everything in this
+module runs on the contributor's own machine, against its own file.
 """
 
 from __future__ import annotations
@@ -26,9 +26,9 @@ def load_records(
     period: str | None = None,
     period_column: str = "period",
 ) -> pl.Series:
-    """Read the plant's local file and return the metric column for one period.
+    """Read the contributor's local file and return the metric column for one period.
 
-    CSV for Sprint 1. A production agent would read the plant historian
+    CSV for Sprint 1. A production agent would read the site historian
     (PI, Aspen IP.21) here; the boundary is the same either way.
 
     If ``period`` is given and the file carries a period column, records are
@@ -65,10 +65,10 @@ def load_records(
 
 
 def local_mean(series: pl.Series) -> Decimal:
-    """Reduce the plant's records to a single period aggregate.
+    """Reduce the contributor's records to a single period aggregate.
 
-    Sprint 1 submits the mean. The statistic submitted here is the plant's
-    *local* summary; the DP treatment happens at the hub, across plants
+    Sprint 1 submits the mean. The statistic submitted here is the contributor's
+    *local* summary; the DP treatment happens at the hub, across contributors
     (SPEC section 3.3 — central model, not local).
     """
     try:

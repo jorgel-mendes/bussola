@@ -34,14 +34,14 @@ EXIT_RETRYABLE = 3
 def submit(
     metric: Annotated[str, typer.Option(help="Metric code, e.g. energy_per_tonne.")],
     period: Annotated[str, typer.Option(help="Reporting period label, e.g. 2026-07.")],
-    file: Annotated[Path, typer.Option(help="CSV file holding this plant's records.")],
+    file: Annotated[Path, typer.Option(help="CSV file holding this contributor's records.")],
     column: Annotated[str, typer.Option(help="Column to aggregate.")] = "value",
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Compute and show what would be sent, but send nothing."),
     ] = False,
 ) -> None:
-    """Compute this plant's aggregate for one metric and period, and submit it."""
+    """Compute this contributor's aggregate for one metric and period, and submit it."""
     try:
         config = AgentConfig.from_env()
     except ConfigError as exc:
@@ -71,7 +71,7 @@ def submit(
             typer.echo(f"value      : {payload.value} {spec.unit}")
 
             if dry_run:
-                # The operator sees exactly what would leave the plant, before
+                # The operator sees exactly what would leave the site, before
                 # anything does. Trust in this system is built here.
                 typer.secho("\nDRY RUN — nothing was sent.", fg=typer.colors.YELLOW)
                 raise typer.Exit(0)
@@ -95,10 +95,10 @@ def position(
     metric: Annotated[str, typer.Option(help="Metric code, e.g. energy_per_tonne.")],
     period: Annotated[str, typer.Option(help="Reporting period label, e.g. 2026-07.")],
 ) -> None:
-    """Show where this plant sits against its cohort's published benchmark.
+    """Show where this contributor sits against its cohort's published benchmark.
 
     This is the question a member actually joined to have answered, and it is
-    asked from the plant's own machine with the plant's own credential. It reads
+    asked from the contributor's own machine with its own credential. It reads
     an already-published differentially private release; it spends no privacy
     budget and releases nothing, so it is safe to run on a schedule.
     """
