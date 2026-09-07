@@ -374,7 +374,7 @@ story most needs to demonstrate and the harder half to fake. See §4.5.
 tests run OpenDP roughly 155 times at ~450 ms per release. Context reuse was
 measured and gives no speedup (1.0×) — the cost is in the release itself, not
 in building the compositor. Deepening these toward SPEC §7.5's 10,000 trials is
-recorded as `S3-8`, and needs its own CI job rather than a tighter loop.
+recorded as `S3-9`, and needs its own CI job rather than a tighter loop.
 
 ### 4.5 What the tests found that design review did not
 
@@ -405,7 +405,7 @@ broken number with an invisibly meaningless one.
 
 | Category | Purpose |
 |---|---|
-| **Statistical calibration at depth** (`S3-8`) | Assert the empirical distribution matches the exponential mechanism's theory, not merely that spread responds to epsilon. Needs its own CI job |
+| **Statistical calibration at depth** (`S3-9`) | Assert the empirical distribution matches the exponential mechanism's theory, not merely that spread responds to epsilon. Needs its own CI job |
 | **Privacy–utility sweep** | SPEC §8, over ε × N × statistic, emitting a CSV that serves both the design document and the results charts |
 | **Accuracy intervals** (`S2-5`) | Derived by simulation, since `summarize()` returns none for the exponential mechanism |
 | **Regression** | Golden-file outputs under a fixed seed — in tests only, never in production releases |
@@ -525,7 +525,7 @@ disclosure in place.
 |---|---|
 | Count, mean and stddev mechanisms | Far worse value per unit of epsilon (SPEC §6.1). At ε=1 split three ways a DP mean's interval came back wider than the sum being estimated. Shipping only the statistic that works is a position, not a gap |
 | Accuracy intervals (`S2-5`) | `summarize()` returns none for the exponential mechanism (ADR-0003 finding 4). Needs simulation; deferred to Sprint 3 |
-| 10,000-trial calibration (`S3-8`) | ~450 ms per release, and context reuse measured at 1.0× speedup. Needs its own CI job, not a tighter loop |
+| 10,000-trial calibration (`S3-9`) | ~450 ms per release, and context reuse measured at 1.0× speedup. Needs its own CI job, not a tighter loop |
 | zCDP accountant | Basic composition can be checked with a calculator and explained on camera. `BudgetPeriod.accountant` carries the choice and refuses loudly rather than mis-accounting |
 
 **Also delivered, unplanned:** `bootstrap_deploy` (Render's free tier has no
@@ -538,15 +538,49 @@ retained deploy log; and `create_superuser()` bypasses
 `AUTH_PASSWORD_VALIDATORS`, so a deploy could stand up an internet-reachable
 admin with `admin`/`admin` and report success.
 
-**Carried to Sprint 3:** `S2-5` (accuracy intervals), `S3-8` (calibration
+**Carried to Sprint 3:** `S2-5` (accuracy intervals), `S3-9` (calibration
 depth), `S1-13` (invite `quantic-grader`).
 
-### Sprint 3 — product surface and evidence (planned)
+> **Card numbering corrected in Sprint 3.** These documents called the
+> calibration card `S3-8`; on the board `S3-8` is the final recording and
+> calibration is `S3-9`. The board is the graded artifact, so the documents
+> moved to match it rather than the other way round.
 
-Contributor self-service position view · accuracy intervals on every published
-value (`S2-5`) · privacy–utility sweep from SPEC §8 · ledger CSV export for the
-Auditor · calibration depth (`S3-8`) · final demo recording.
+### Sprint 3 — product surface and evidence
 
-One week, so the same discipline applies: the graded deliverables — final
-design document, business-first README and presentation, and the 15–20 minute
-recording — take the back half, leaving roughly three days of feature work.
+**Delivered.** Full review in [SPRINT-3-REVIEW.md](SPRINT-3-REVIEW.md).
+
+| Delivered | Where |
+|---|---|
+| The privacy–utility sweep (SPEC §8) | `evaluation/sweep.py`; 7,000 releases, 2h47m |
+| The curve, and a reading for each release | `benchmarks/utility.py`, the dashboard |
+| Accuracy intervals by simulation (`S2-5`) | Inverted onto the true value, clamped to the declared bounds |
+| Contributor self-service position (`S3-1`) | `bussola-agent position`; spends no budget |
+| Ledger CSV export for the Auditor (`S3-4`) | Running cumulative epsilon; admin action + command |
+| Command test coverage (retro `B2`) | `release_period` and `load_submissions`, 0% → 97% |
+| Retired vocabulary in the product (`S3-10`) | The agent's `--help` still said "plant" |
+
+**Cut:** `S3-6` (trend across periods) and `S3-9` (10,000-trial calibration
+depth). Neither was attempted and abandoned; both were cut at planning, as in
+Sprint 2.
+
+**What the sweep changed about the product, not only the documentation.**
+SPEC §8's predicted headline — *"at ε=1.0 with 25 plants, 96% of plants are
+assigned to the correct quartile"* — measured at **47.6%**. The result that
+replaced it is ε·N ≈ 200 as the iso-utility contour, with the counterweight that
+epsilon cannot buy its way out of a small cohort: at N=5 the correct-quartile
+rate moves only from 36.8% at ε=0.1 to 50.8% at ε=8, and the release is
+collapsing every contributor into one quartile rather than misplacing a few.
+
+That is the measured case for two decisions previously argued from theory — the
+minimum-contributor suppression threshold, and central DP over local DP
+([ADR-0002](adr/0002-central-dp-over-local-dp.md)), since under local DP every
+contributor is the small-N regime at N=1.
+
+**The demo releases at ε = 1.0 and says the number out loud.** At that epsilon a
+50-contributor cohort places 66.9% of its members correctly, and the dashboard
+displays it beside the benchmark. Raising epsilon until the figure flattered the
+demo was available and was not taken; ε=1.0 is the value the literature treats
+as standard, and therefore the one a reader can compare against.
+
+**Test count and coverage:** 280 → 412 tests, 83% → 93%.
