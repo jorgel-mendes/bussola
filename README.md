@@ -287,4 +287,5 @@ the [future backlog](docs/FUTURE-BACKLOG.md).
 ---
 
 Made by **Jorge Luis dos Santos Mendes**, a chemical engineer and data engineer
-based in Salvador, Brazil. [GitHub](https://github.com/jorgel-mendes)
+based in Salvador, Brazil.
+[LinkedIn](https://www.linkedin.com/in/jorgelsmendes/) · [GitHub](https://github.com/jorgel-mendes)

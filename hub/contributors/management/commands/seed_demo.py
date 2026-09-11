@@ -37,7 +37,7 @@ COLLABORATION = {
         "Members submit monthly efficiency aggregates and receive protected "
         "sector benchmarks in return."
     ),
-    "operator_name": "Federação das Indústrias do Estado da Bahia (FIEB)",
+    "operator_name": "Atlântico Industrial Consortium (fictional)",
     "operator_kind": OperatorKind.ASSOCIATION,
     "min_contributors": 5,
 }
