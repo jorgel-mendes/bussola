@@ -5,8 +5,8 @@ Quantic MSSE Capstone · Jorge Luis dos Santos Mendes
 
 [![CI](https://github.com/jorgel-mendes/bussola/actions/workflows/ci.yml/badge.svg)](https://github.com/jorgel-mendes/bussola/actions/workflows/ci.yml)
 
-Companies in a sector all want the same answer: *how do I compare?* Getting it
-means pooling numbers nobody wants to hand over. Bússola lets them compare
+Companies in a sector all want the know *how do I compare?* but getting it
+means sharing your data with someone. Bússola lets companies work together
 without anyone seeing anyone else's data — and, unusually, tells you how much to
 trust the answer it gives you.
 
@@ -28,31 +28,30 @@ Live at **<https://bussola-hub.onrender.com>**
 
 In my chemical engineering degree, almost every question worth researching
 needed real plant data, and we almost never got it. Not because companies were
-hostile — several were willing. Nobody could give them a safe way to say yes, so
-the default answer became no.
+hostile but because there wasn't a safe procedure to say yes, so the answer
+was frequently no.
 
-That wall isn't a student problem. It's the same one that stops an industry
-association answering *"how does my plant compare?"*, stops hospitals pooling
-results across sites, and stops a statistical agency publishing without exposing
+This isn't an academic problem. It's the same one that stops hospitals pooling
+results across sites and stops a statistical agency publishing without exposing
 the people it surveyed.
 
-The reason is that trust today is a contract rather than a control. You get a
-confidentiality agreement and a promise. Under LGPD, a promise isn't something a
-compliance officer can sign off on.
+The reason is that trust today is a contract. You get a
+confidentiality agreement and a promise. And under privacy laws, a promise 
+isn't something a compliance officer can sign off on.
 
 Bússola replaces the promise with something checkable. Contributors compute
 their own numbers locally and send only an aggregate. The operator publishes
 group statistics protected by differential privacy. Every unit of privacy spent
-gets written to a ledger that can't be edited and can be exported — so an
+gets written to a ledger that can't be edited and can be exported. So an
 auditor can verify the guarantee held instead of taking someone's word for it.
 
 ### Who runs it
 
 Whoever the members already trust: an industry association, a university's data
 office, a statistical agency, a regulator. They have the members and the
-mandate; what they lacked was the mechanism.
+mandate and with Bussola the mechanism.
 
-The system models that explicitly — a `Collaboration` records which kind of
+The system models that explicitly. A `Collaboration` records which kind of
 operator it is, because the guarantee is only ever as strong as the trust it
 sits on ([ADR-0004](docs/adr/0004-collaboration-as-tenancy-boundary.md)).
 
@@ -64,13 +63,15 @@ with better models. "Data clean room" is now a Gartner category served by AWS,
 Snowflake and Decentriq.
 
 Those are built for enterprises with legal teams and seven-figure budgets;
-MELLODDY spent $1.19M on compute in one year. A regional federation, a
-university research group, or a twelve-plant consortium has the same problem and
-no product.
+MELLODDY spent $1.19M on compute in one year. An university research group 
+or a twelve-plant consortium has the same problem and no product.
 
 The demo is industrial: cement plants, thermal energy per tonne of clinker, with
 bounds taken from process thermodynamics and the EU BAT reference document
 ([docs/REFERENCES.md](docs/REFERENCES.md)).
+
+The choice form industrial was made because of my inspiration and background
+and physical based boundaries were easier to test.
 
 ---
 
