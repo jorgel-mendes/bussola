@@ -185,8 +185,8 @@ differential privacy at all.
 
 ### F-11 · Purpose limitation and LGPD artifacts · product · 5 days
 Declared purpose per metric and per query; a generated record of processing
-activities; the inputs a DPIA needs. Brazil-specific and directly aligned with
-FIEB's institutional role.
+activities; the inputs a DPIA needs. Brazil-specific, and exactly what an
+industry association or regulator running a collaboration would be asked for.
 
 ### F-12 · Human approval gate before release · product · 3 days
 A release proposal that a named person approves, with the approval in the
