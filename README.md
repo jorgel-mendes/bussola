@@ -1,166 +1,97 @@
 # Bússola
 
-**A benchmarking platform for groups that can't share their data.**
-Quantic MSSE Capstone · Jorge Luis dos Santos Mendes
+Benchmarking for companies that can't share their data with each other.
 
 [![CI](https://github.com/jorgel-mendes/bussola/actions/workflows/ci.yml/badge.svg)](https://github.com/jorgel-mendes/bussola/actions/workflows/ci.yml)
 
-Companies in a sector all want the know *how do I compare?* but getting it
-means sharing your data with someone. Bússola lets companies work together
-without anyone seeing anyone else's data — and, unusually, tells you how much to
-trust the answer it gives you.
+**[Live demo](https://bussola-hub.onrender.com)** · [Design doc](docs/DESIGN.md) · [Results](evaluation/RESULTS.md) · [Task board](https://trello.com/b/ZMEqk4Up/bussola-msse-capstone)
 
-Live at **<https://bussola-hub.onrender.com>**
+![The Bússola dashboard: a benchmark for 50 cement plants, with a note on how far to trust it](docs/images/hero.png)
 
-| Deliverable | |
-|---|---|
-| Deployed version | <https://bussola-hub.onrender.com> ✅ |
-| Task board (Trello) | [Bussola — MSSE Capstone](https://trello.com/b/ZMEqk4Up/bussola-msse-capstone) ✅ public |
-| Design & testing doc | [`docs/DESIGN.md`](docs/DESIGN.md) ✅ |
-| Sprint reviews | [Sprint 1](docs/SPRINT-1-REVIEW.md) · [Sprint 2](docs/SPRINT-2-REVIEW.md) · [Sprint 3](docs/SPRINT-3-REVIEW.md) ✅ |
-| Demo recordings | One per sprint ✅ |
-| Evaluation | [`evaluation/RESULTS.md`](evaluation/RESULTS.md) — 7,000 measured releases ✅ |
-| Where this goes next | [`docs/FUTURE-BACKLOG.md`](docs/FUTURE-BACKLOG.md) |
+Companies in the same sector all want to know how they compare, but finding out
+usually means handing your data to someone else. Bússola lets a group of
+companies build shared benchmarks without anyone seeing anyone else's numbers.
+It also tells you how far to trust each result, which is something most tools
+in this space leave out.
+
+I built it as my capstone project for the Master of Science in Software
+Engineering at Quantic.
 
 ---
 
 ## Why I built it
 
 In my chemical engineering degree, almost every question worth researching
-needed real plant data, and we almost never got it. Not because companies were
-hostile but because there wasn't a safe procedure to say yes, so the answer
-was frequently no.
+needed real plant data, and we rarely got it. Companies weren't hostile. There
+just wasn't a safe way for them to say yes, so the answer was usually no.
 
-This isn't an academic problem. It's the same one that stops hospitals pooling
-results across sites and stops a statistical agency publishing without exposing
-the people it surveyed.
+The same problem shows up well outside universities. Hospitals can't easily pool
+results across sites, and statistical agencies have to publish without exposing
+the people they surveyed.
 
-The reason is that trust today is a contract. You get a
-confidentiality agreement and a promise. And under privacy laws, a promise 
-isn't something a compliance officer can sign off on.
+Today that trust usually rests on a contract: a confidentiality agreement and a
+promise. Under privacy laws like Brazil's LGPD, a promise isn't something a
+compliance officer can sign off on.
 
-Bússola replaces the promise with something checkable. Contributors compute
-their own numbers locally and send only an aggregate. The operator publishes
-group statistics protected by differential privacy. Every unit of privacy spent
-gets written to a ledger that can't be edited and can be exported. So an
-auditor can verify the guarantee held instead of taking someone's word for it.
+Bússola replaces the promise with something you can check:
 
-### Who runs it
+1. Each company computes its own numbers on its own machine and sends only a
+   summary.
+2. The hub publishes group statistics protected by
+   [differential privacy](https://en.wikipedia.org/wiki/Differential_privacy).
+3. Every bit of privacy spent is recorded in a ledger that can't be edited, so
+   an auditor can verify it later.
 
-Whoever the members already trust: an industry association, a university's data
-office, a statistical agency, a regulator. They have the members and the
-mandate and with Bussola the mechanism.
+### Who it's for
 
-The system models that explicitly. A `Collaboration` records which kind of
-operator it is, because the guarantee is only ever as strong as the trust it
-sits on ([ADR-0004](docs/adr/0004-collaboration-as-tenancy-boundary.md)).
+The operator is whoever the members already trust, like an industry
+association, a university data office or a statistical agency. They have the
+members and the mandate. Bússola gives them the mechanism.
 
-### Why the small end of the market
+Large players already have options. Catena-X connects the German automotive
+supply chain, MELLODDY let ten rival pharma companies train models together, and
+AWS, Snowflake and Decentriq all sell "data clean rooms". Those are built for
+enterprises with legal teams and big budgets (MELLODDY spent $1.19M on compute
+in a single year). Research groups and regional consortia have the same problem
+with far fewer options.
 
-The big players solved this for themselves. Catena-X did it across German
-automotive, MELLODDY across ten rival pharma companies — and all ten came out
-with better models. "Data clean room" is now a Gartner category served by AWS,
-Snowflake and Decentriq.
-
-Those are built for enterprises with legal teams and seven-figure budgets;
-MELLODDY spent $1.19M on compute in one year. An university research group 
-or a twelve-plant consortium has the same problem and no product.
-
-The demo is industrial: cement plants, thermal energy per tonne of clinker, with
-bounds taken from process thermodynamics and the EU BAT reference document
-([docs/REFERENCES.md](docs/REFERENCES.md)).
-
-The choice form industrial was made because of my inspiration and background
-and physical based boundaries were easier to test.
+I chose an industrial example (cement plants, and the thermal energy they use
+per tonne of clinker) because of my own background, and because physical limits
+made the metric's bounds easy to justify and test. The sources are in
+[docs/REFERENCES.md](docs/REFERENCES.md).
 
 ---
 
 ## What it does
 
-Every number on the dashboard is differentially private. Quartiles come from the
-exponential mechanism, using a candidate grid built from the metric's public
-bounds — never from the submitted data.
+### Publishes benchmarks you can't reverse-engineer
 
-Each release charges its epsilon to an append-only ledger, in the same database
-transaction that writes the release. If a release would go over the period's
-budget, it's refused rather than served.
+The dashboard never shows an individual company's value. Quartiles are released
+through OpenDP's exponential mechanism, and each release is paid for from a
+privacy budget. If a release would go over budget, the system refuses it.
 
-Three things follow from that:
+![Released quartiles, with a range for where each true value probably is](docs/images/bands.png)
 
-- **No exact value is reachable anywhere in the UI.**
-- **A release and its ledger entry can't exist without each other.** It's one
-  transaction, the foreign key is `NOT NULL`, and tests assert it in both
-  directions.
-- **The system tells you when its own answer is useless.** Which is the part
-  worth explaining.
+Beside each number is a range for where the true value probably sits. OpenDP
+doesn't provide that for this mechanism, so I measured it by simulation (more on
+that [below](#what-i-learned-from-testing-it)).
 
-### When the answer is too noisy to use
+### Says when a result isn't good enough
 
-Each quartile is drawn independently. In a small cohort the noise can be wider
-than the gaps between them, and the order breaks. Here's a real release from the
-deployed hub:
+![A release from six contributors, flagged as too noisy to use](docs/images/too-noisy.png)
 
-| Cohort | N | q25 | median | q75 | |
-|---|---|---|---|---|---|
-| `2011` | 50 | 3048.0 | 3718.9 | 4175.1 | usable |
-| `2320` | 47 | 3155.4 | 3370.1 | 4309.2 | usable |
-| `2farm` | 6 | **158.5** | 190.9 | **73.4** | q75 below q25 |
+With only six contributors, the privacy noise is bigger than the gaps between the
+quartiles, so they can come out in the wrong order. Here the median landed below
+the first quartile.
 
-Six contributors, and the third quartile came out below the first. It happened
-across three separate seeds, so it's how the mechanism behaves at that size, not
-bad luck.
+Sorting them would be allowed, but it would also hide the clearest sign that
+this result can't be trusted. So the dashboard shows the numbers as they came out
+and flags the release.
 
-I could sort those three numbers. It would even be safe to do — differential
-privacy survives post-processing. But it would hide the one signal telling a
-member not to rely on this release, and swap a visibly broken number for an
-invisibly meaningless one. So the dashboard shows them as they came out, and
-says the release can't be used.
+### Answers "where do I stand?"
 
----
-
-## Try it
-
-You'll need [uv](https://docs.astral.sh/uv/) and Python 3.12.
-
-```bash
-uv sync
-uv run python hub/manage.py migrate
-uv run python hub/manage.py seed_demo --contributors 12 --periods 24 --tokens-out data/tokens.json
-uv run python datagen/generate.py --contributors 12 --periods 24 --out data
-uv run python hub/manage.py runserver
-```
-
-The dashboard is at <http://127.0.0.1:8000/>, the admin at `/admin/` (run
-`createsuperuser` first).
-
-### Submit as a contributor
-
-```bash
-export BUSSOLA_HUB_URL=http://127.0.0.1:8000
-export BUSSOLA_TOKEN=$(python3 -c "import json;print(json.load(open('data/tokens.json'))['plant-01'])")
-uv run bussola-agent submit --metric specific_thermal_energy --period 2026-07 \
-  --file data/plant-01/specific_thermal_energy.csv --dry-run
-```
-
-`--dry-run` shows exactly what would leave the machine. Drop it to actually send.
-
-### Publish a release
-
-Always check the cost first. Epsilon can't be refunded once it's spent:
-
-```bash
-uv run python hub/manage.py release_period --collaboration bahia-industry --period 2026-07 --epsilon 1.0 --dry-run
-```
-
-Then drop `--dry-run` to publish. The command reports what it published, what it
-suppressed for having too few contributors, and — if the budget runs out — which
-cell it refused and what's left. Cells already published stay published; a cell
-that can't be paid for doesn't undo them.
-
-### Ask where you sit
-
-This is the question a member actually joined to have answered, and it runs on
-their own machine with their own credential:
+This is the question a company joins to get answered. It runs on the company's
+own machine with its own credentials:
 
 ```bash
 uv run bussola-agent position --metric specific_thermal_energy --period 2026-07
@@ -174,33 +105,129 @@ benchmark   : q25=3182.211055  median=3262.713568  q75=3772.562814
 You are in Q3.
 ```
 
-It costs nothing. The hub reads a release that was already published and paid
-for, and puts your own number against it — that's post-processing, so no budget
-is spent. Safe to run on a schedule, and there's a test that hits it ten times
-and checks the ledger doesn't grow.
+It doesn't use any privacy budget, because it only compares your own number with
+a result that was already published. If that result was flagged as too noisy,
+the command says so instead of guessing.
 
-If the release came out in the wrong order, it won't guess:
-
-```
-Your position cannot be reported.
-
-This release is too noisy to place you against. The published quartiles came
-back out of order, which happens when a cohort is small enough that the privacy
-noise exceeds the spacing between them.
-```
-
-### Audit the budget
+### Lets an auditor check the budget
 
 ```bash
 uv run python hub/manage.py export_ledger --collaboration bahia-industry --period 2026-07
 ```
 
-Every spend, in order, with a running total next to the authorised budget on each
-row. Epsilon adds up linearly here, so that column *is* the accounting — you can
-see whether the budget was ever exceeded without doing any arithmetic. The
-command won't report success if it wrote fewer rows than the ledger holds.
+This exports every privacy spend in order, with a running total next to the
+approved budget, so you can see at a glance whether the budget was ever
+exceeded.
 
-### The multi-party demo
+---
+
+## What I learned from testing it
+
+I ran 7,000 simulated releases through the system and compared each one with the
+true values, which I knew because the data is synthetic.
+
+![Share of companies placed in the correct quartile, by privacy level and group size](docs/images/tradeoff-curve.png)
+
+A few things stood out:
+
+- **Group size matters more than the privacy setting.** Placing 90% of companies
+  in the right quartile took ε=2 with 100 contributors, ε=4 with 50, or ε=8 with
+  25. Each pair multiplies to about 200, so halving the privacy cost means
+  doubling the group.
+- **Small groups don't get rescued by a looser setting.** With 5 contributors,
+  going from ε=0.1 to ε=8 only raised correct placement from 37% to 51%.
+- **The demo is realistic, not flattering.** It uses ε=1, a common value in the
+  research literature. With 50 contributors that places 66.9% of companies
+  correctly, and the dashboard shows that figure next to the benchmark. I could
+  have picked a setting that looked better, but I'd rather show where the system
+  stands today.
+
+The full write-up, including the method and its limits, is in
+[evaluation/RESULTS.md](evaluation/RESULTS.md).
+
+---
+
+## How it works
+
+```
+Agent (company 01) ─┐
+Agent (company 02) ─┼── HTTPS + token ──▶  Hub (Django + OpenDP) ──▶  Dashboard
+Agent (company NN) ─┘                      PostgreSQL
+```
+
+The **agent** is a small command-line tool that runs at each company. It reads a
+local CSV file, computes a summary and sends only that. It's a separate package
+with no Django dependency, so each company runs its own program with its own
+credentials.
+
+The **hub** stores submissions, releases differentially private statistics,
+keeps the privacy ledger and serves the dashboard.
+
+**Built with:** Python 3.12, Django 5, Django REST Framework, OpenDP, Polars,
+PostgreSQL, pydantic, Typer, Chart.js, Docker, GitHub Actions and Render.
+
+| Folder | What's in it |
+|---|---|
+| `hub/` | The Django app: ingestion API, privacy mechanisms, budget ledger, dashboard, admin |
+| `agent/` | The command-line tool each company runs |
+| `contracts/` | The data format shared by the agent and the hub |
+| `datagen/` | Synthetic plant data, with the true values saved for testing |
+| `evaluation/` | The simulation behind the results above |
+
+<details>
+<summary>Agent exit codes</summary>
+
+The agent is meant to run unattended (from cron, for example), so its exit codes
+tell you what to do next.
+
+| Code | Meaning | What to do |
+|---|---|---|
+| 0 | Submitted | Nothing |
+| 1 | Configuration or local data problem | Someone needs to look at it |
+| 2 | The hub rejected the data | Don't retry without changing it |
+| 3 | Temporary problem (network, server error) | Retry later |
+
+</details>
+
+---
+
+## Run it locally
+
+You'll need [uv](https://docs.astral.sh/uv/) and Python 3.12.
+
+```bash
+uv sync
+uv run python hub/manage.py migrate
+uv run python hub/manage.py seed_demo --contributors 12 --periods 24 --tokens-out data/tokens.json
+uv run python datagen/generate.py --contributors 12 --periods 24 --out data
+uv run python hub/manage.py runserver
+```
+
+The dashboard is at <http://127.0.0.1:8000/> and the admin is at `/admin/` (run
+`createsuperuser` first).
+
+**Submit data as a company.** `--dry-run` shows exactly what would be sent
+without sending it:
+
+```bash
+export BUSSOLA_HUB_URL=http://127.0.0.1:8000
+export BUSSOLA_TOKEN=$(python3 -c "import json;print(json.load(open('data/tokens.json'))['plant-01'])")
+uv run bussola-agent submit --metric specific_thermal_energy --period 2026-07 \
+  --file data/plant-01/specific_thermal_energy.csv --dry-run
+```
+
+**Publish a release.** Check the cost first, since spent privacy budget can't be
+refunded. Remove `--dry-run` to publish:
+
+```bash
+uv run python hub/manage.py release_period --collaboration bahia-industry --period 2026-07 --epsilon 1.0 --dry-run
+```
+
+<details>
+<summary>Multi-party demo with Docker</summary>
+
+Three agents in separate containers, each with its own volume and token,
+submitting to the hub over the network:
 
 ```bash
 docker compose up --build hub
@@ -208,50 +235,7 @@ docker compose run --rm seed
 docker compose up agent-01 agent-02 agent-03
 ```
 
-Three containers, three volumes, three tokens, one network boundary.
-
----
-
-## How it's put together
-
-```
-Agent (contributor 01) ─┐
-Agent (contributor 02) ─┼─ HTTPS + bearer token ─→  Hub (Django) ─→ Dashboard
-Agent (contributor NN) ─┘                           Postgres
-```
-
-The agent is a separate package with no Django dependency. That's what makes the
-multi-party story real rather than cosmetic — each contributor runs its own
-program, with its own credential, reading only its own files.
-
-| Component | Stack | Role |
-|---|---|---|
-| `hub/` | Django 5 + DRF | Ingestion, catalog, releases, dashboard, admin |
-| `agent/` | standalone CLI | Reads local CSV, computes an aggregate, submits |
-| `contracts/` | pydantic | The wire format both sides import |
-| `datagen/` | script | Synthetic data, with ground truth |
-| `evaluation/` | pytest → CSV | The privacy–utility sweep |
-
-| Django app | Responsibility |
-|---|---|
-| `collaborations` | Collaborations, cohorts, operator identity |
-| `contributors` | Contributors and hashed API tokens |
-| `catalog` | Metric definitions — bounds, rationale, privacy unit |
-| `ingest` | Reporting periods, submissions, the API |
-| `benchmarks` | Aggregation, the release path, the dashboard |
-| `privacy` | OpenDP mechanisms and their registry |
-| `budget` | Epsilon budget and the append-only ledger |
-
-### Agent exit codes
-
-It runs unattended from cron, so exit codes are its real interface:
-
-| Code | Meaning | What to do |
-|---|---|---|
-| 0 | Submitted | — |
-| 1 | Config or local data problem | Someone has to look at it |
-| 2 | Hub rejected the data | Don't retry unchanged |
-| 3 | Transient (network, 5xx) | Retry later |
+</details>
 
 ---
 
@@ -263,89 +247,44 @@ uv run pytest --cov --cov-report=term-missing
 uv run ruff check .
 ```
 
-**412 tests, 93% coverage**, no skips on Postgres.
+There are 412 tests with 93% coverage, and CI runs them on every push. Many of
+them protect privacy rules rather than ordinary behaviour. For example, one makes
+sure a company that submits twice isn't counted twice.
 
-A good number of them defend privacy properties rather than plain correctness,
-and say so in their docstrings — submission idempotency, for instance, because a
-contributor that submits twice would count double and break the sensitivity
-bound the whole guarantee rests on.
+CI uses PostgreSQL instead of SQLite, because the budget's locking only works
+on a real database. A guard test fails the build if the concurrency tests are
+skipped. For the most important tests, I deliberately broke the code they
+protect to confirm they actually fail.
 
-CI runs against Postgres rather than SQLite on purpose: the budget accountant
-uses `select_for_update()`, which does nothing on SQLite, so the concurrency
-tests would pass while proving nothing. There's a guard that fails the build if
-they skip instead of running.
-
-The suite takes about 15 minutes, most of it real OpenDP releases. That cost was
-accepted rather than trimmed.
-
-The privacy–utility sweep runs in its own workflow — 7 epsilons × 5 cohort sizes
-× 200 trials is roughly two and a half hours, and no one should wait for that on
-every push. Its fast tests still run every time, because a test harness whose
-own tests never run isn't worth trusting.
+The 7,000-release simulation takes about two and a half hours, so it runs in a
+separate workflow instead of on every push.
 
 ---
 
-## What the evidence says
+## Project documents
 
-Sprint 3 ran 7,000 real releases through the system's own mechanism and scored
-them against known ground truth. Full write-up in
-[`evaluation/RESULTS.md`](evaluation/RESULTS.md).
+This started as a three-sprint capstone, and the process is documented along
+with the code.
 
-Three points on the grid manage 90%+ correct placement with no unusable
-releases: ε=8 at 25 contributors, ε=4 at 50, ε=2 at 100. Each multiplies to 200.
+| Document | What it covers |
+|---|---|
+| [Design & testing](docs/DESIGN.md) | Architecture, patterns, deployment options and costs, test strategy |
+| [Architecture decisions](docs/adr/) | Why Django, why central differential privacy, why OpenDP, how tenancy works |
+| [Results](evaluation/RESULTS.md) | The privacy vs. accuracy simulation |
+| Sprint reviews | [Sprint 1](docs/SPRINT-1-REVIEW.md) · [Sprint 2](docs/SPRINT-2-REVIEW.md) · [Sprint 3](docs/SPRINT-3-REVIEW.md) |
+| [Task board](https://trello.com/b/ZMEqk4Up/bussola-msse-capstone) | Every user story and task, on Trello |
+| [Future backlog](docs/FUTURE-BACKLOG.md) | Where the project could go next |
 
-> **To halve the privacy cost, double the cohort.**
+## What's next
 
-And more epsilon can't rescue a small group. At 5 contributors the correct-
-quartile rate only moves from 36.8% (ε=0.1) to 50.8% (ε=8) — because at that
-size the release isn't misplacing a few members, it's collapsing everyone into a
-single quartile.
-
-The demo publishes at **ε=1.0**, where a 50-contributor cohort places 66.9% of
-its members correctly. The dashboard says so, right next to the benchmark.
-
-I could have raised epsilon until that read 94% — the sweep tells me exactly
-where. I didn't. ε=1.0 is the value the literature treats as standard, so it's
-the one a reader can compare against, and the gap is honest future work with a
-number attached rather than a vague promise. Tuning a parameter until the demo
-looked good would be a strange way to demonstrate a project about replacing
-promises with proof.
+The simulation showed that Bússola works best for larger groups, so most of the
+ideas for what comes next focus on smaller ones. They include protecting
+individual records rather than whole companies (which would let a single company
+benchmark its own plants), secure aggregation for groups of two to ten, and a
+tighter privacy accountant that gets more out of the same budget. Details are in
+the [future backlog](docs/FUTURE-BACKLOG.md).
 
 ---
 
-## Where it stands
-
-**Sprint 1 — the pipeline.** Domain model with database-level constraints,
-tenancy, token auth, the ingestion API, the agent CLI, synthetic data with
-ground truth, an exact-statistics dashboard behind a warning banner, CI, Docker,
-and a Render blueprint.
-
-**Sprint 2 — the guarantee.** Quantile mechanisms, per-period epsilon budgets,
-the append-only ledger, budget refusal, suppression below the contributor
-threshold, release and ledger in one transaction, and the deployment.
-
-**Sprint 3 — the evidence.** The privacy–utility sweep, accuracy intervals
-derived from it, the trade-off curve in the dashboard, the contributor position
-view, and the ledger export.
-
-### Not built, on purpose
-
-**Mean and standard deviation.** Far worse value per unit of epsilon than
-quartiles. At ε=1 split three ways, a DP mean's interval came back wider than the
-quantity being estimated. Shipping only the statistic that works is a position,
-not a gap.
-
-**A zCDP accountant.** Basic composition can be checked with a calculator and
-explained out loud. It's the obvious next upgrade —
-[`docs/FUTURE-BACKLOG.md`](docs/FUTURE-BACKLOG.md) has it as the best
-utility-per-day item available.
-
-**Anything cryptographic.** Central DP with a trusted curator is the
-architecture, argued in
-[ADR-0002](docs/adr/0002-central-dp-over-local-dp.md) rather than assumed. What a
-two-to-five company deployment would need instead is the first half of the
-future backlog.
-
----
-
-A thin slice that reaches production beats a thick slice that doesn't.
+Made by **Jorge Luis dos Santos Mendes**, a chemical engineer and data engineer
+based in Salvador, Brazil. [GitHub](https://github.com/jorgel-mendes)
