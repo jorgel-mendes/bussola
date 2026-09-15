@@ -4,7 +4,7 @@ Benchmarking for companies that can't share their data with each other.
 
 [![CI](https://github.com/jorgel-mendes/bussola/actions/workflows/ci.yml/badge.svg)](https://github.com/jorgel-mendes/bussola/actions/workflows/ci.yml)
 
-**[Live demo](https://bussola-hub.onrender.com)** · [Design doc](docs/DESIGN.md) · [Results](evaluation/RESULTS.md) · [Task board](https://trello.com/b/ZMEqk4Up/bussola-msse-capstone)
+**[Live demo](https://bussola-hub.onrender.com)** · [How it works](#how-it-works) · [Design doc](docs/DESIGN.md) · [Results](evaluation/RESULTS.md) · [Task board](https://trello.com/b/ZMEqk4Up/bussola-msse-capstone)
 
 ![The Bússola dashboard: a benchmark for 50 cement plants, with a note on how far to trust it](docs/images/hero.png)
 
@@ -149,11 +149,61 @@ The full write-up, including the method and its limits, is in
 
 ## How it works
 
+### Where the data goes
+
+Each company's raw readings stay on its own machine. Only one number per month
+crosses the network, and nobody outside the hub ever sees that number unaltered.
+
+```mermaid
+flowchart LR
+    subgraph site["🏭 At each company"]
+        csv[("Daily readings<br/>local CSV")] --> agent["<b>Agent</b><br/>checks the bounds,<br/>computes the<br/>monthly value"]
+    end
+
+    subgraph hub["🔒 Hub, run by the consortium"]
+        api["<b>API</b><br/>token login,<br/>one value per<br/>company per month"] --> db[("Exact values<br/>stored, never<br/>displayed")] --> release["<b>Private release</b><br/>OpenDP adds noise,<br/>ledger records<br/>the cost"]
+    end
+
+    subgraph readers["👀 Who sees the result"]
+        dash["<b>Dashboard</b><br/>noisy quartiles<br/>and how far<br/>to trust them"]
+        pos["<b>Each company</b><br/>“where do I stand?”<br/>its own value against<br/>the release"]
+        audit["<b>Auditor</b><br/>ledger exported<br/>as CSV"]
+    end
+
+    agent -- "one number<br/>over HTTPS" --> api
+    release --> dash
+    release --> pos
+    release --> audit
 ```
-Agent (company 01) ─┐
-Agent (company 02) ─┼── HTTPS + token ──▶  Hub (Django + OpenDP) ──▶  Dashboard
-Agent (company NN) ─┘                      PostgreSQL
+
+### What happens when a month is released
+
+Publishing is a decision the operator makes, and the hub checks three things
+before anything reaches a reader. Every check can say no.
+
+```mermaid
+flowchart LR
+    start(["Operator<br/>releases<br/>a month"]) --> gate{"5 or more<br/>companies?"}
+    gate -- yes --> budget{"Budget<br/>left?"}
+    budget -- yes --> dp["<b>OpenDP</b><br/>q25, median, q75<br/>with calibrated noise"]
+    dp --> order{"Quartiles<br/>in order?"}
+    order -- yes --> ok["<b>Published</b><br/>with a measured<br/>accuracy range"]
+
+    gate -- no --> sup["<b>Suppressed</b><br/>no budget spent"]
+    budget -- no --> ref["<b>Refused</b><br/>nothing written"]
+    order -- no --> noisy["<b>Too noisy</b><br/>shown with a warning"]
+    dp <-. "same<br/>transaction" .-> ledger[("<b>Ledger</b><br/>append-only,<br/>every ε spent")]
+
+    classDef stop fill:#fde2e1,stroke:#c0392b,color:#7b241c
+    classDef go fill:#e3f1e6,stroke:#2e7d32,color:#1b5e20
+    class sup,ref,noisy stop
+    class ok go
 ```
+
+Checking your own position spends no budget: it compares a company's own
+submitted value with a release that has already been published and paid for.
+
+### The pieces
 
 The **agent** is a small command-line tool that runs at each company. It reads a
 local CSV file, computes a summary and sends only that. It's a separate package
